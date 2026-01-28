@@ -14,10 +14,6 @@ const nextConfig: NextConfig = {
   },
   // Output file tracing for monorepo - include shared package
   outputFileTracingRoot: path.join(__dirname, '../../'),
-  // Turbopack config only applies to dev mode
-  turbopack: {
-    root: '../../',
-  },
 };
 
 export default nextConfig;
