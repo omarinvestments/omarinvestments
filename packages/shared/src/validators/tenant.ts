@@ -27,7 +27,6 @@ const businessTypeSchema = z.enum([
  */
 export const createResidentialTenantSchema = z.object({
   type: z.literal('residential'),
-  propertyId: z.string().min(1),
   firstName: z.string().min(1).max(100),
   lastName: z.string().min(1).max(100),
   email: z.string().email(),
@@ -43,7 +42,6 @@ export const createResidentialTenantSchema = z.object({
  */
 export const createCommercialTenantSchema = z.object({
   type: z.literal('commercial'),
-  propertyId: z.string().min(1),
   businessName: z.string().min(1).max(200),
   dba: z.string().max(200).optional(),
   businessType: businessTypeSchema,
@@ -68,7 +66,6 @@ export const createTenantSchema = z.discriminatedUnion('type', [
  */
 export const updateResidentialTenantSchema = z.object({
   type: z.literal('residential'),
-  propertyId: z.string().min(1).optional(),
   firstName: z.string().min(1).max(100).optional(),
   lastName: z.string().min(1).max(100).optional(),
   email: z.string().email().optional(),
@@ -84,7 +81,6 @@ export const updateResidentialTenantSchema = z.object({
  */
 export const updateCommercialTenantSchema = z.object({
   type: z.literal('commercial'),
-  propertyId: z.string().min(1).optional(),
   businessName: z.string().min(1).max(200).optional(),
   dba: z.string().max(200).optional(),
   businessType: businessTypeSchema.optional(),

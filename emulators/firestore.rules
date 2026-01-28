@@ -49,6 +49,21 @@ service cloud.firestore {
     }
 
     // =========================================================================
+    // Global Tenants
+    // =========================================================================
+
+    match /tenants/{tenantId} {
+      // Authenticated users can read tenants (API handles authorization)
+      allow read: if isSignedIn();
+
+      // Tenant users can read their own record via userId field
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      // All writes go through API (which verifies permissions)
+      allow write: if false; // API only via Admin SDK
+    }
+
+    // =========================================================================
     // LLCs
     // =========================================================================
 

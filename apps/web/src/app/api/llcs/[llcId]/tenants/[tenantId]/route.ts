@@ -26,7 +26,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
   try {
     await requireLlcRole(llcId, ['admin', 'manager', 'accounting', 'maintenance', 'legal', 'readOnly']);
 
-    const tenant = await getTenant(llcId, tenantId);
+    const tenant = await getTenant(tenantId);
     if (!tenant) {
       return NextResponse.json(
         { ok: false, error: { code: 'NOT_FOUND', message: 'Tenant not found' } },
@@ -79,7 +79,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const updated = await updateTenant(llcId, tenantId, parsed.data, user.uid);
+    const updated = await updateTenant(tenantId, parsed.data, user.uid);
     return NextResponse.json({ ok: true, data: updated });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : '';
@@ -121,7 +121,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   try {
     await requireLlcRole(llcId, ['admin']);
 
-    const result = await deleteTenant(llcId, tenantId, user.uid);
+    const result = await deleteTenant(tenantId, user.uid);
     return NextResponse.json({ ok: true, data: result });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : '';

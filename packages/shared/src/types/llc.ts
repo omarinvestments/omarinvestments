@@ -28,9 +28,15 @@ export interface LLC {
 export interface LLCSettings {
   timezone: string;
   currency: string;
+  // Late fee settings
   lateFeeEnabled: boolean;
-  lateFeeAmount?: number;
-  lateFeeGraceDays?: number;
+  lateFeeType?: 'flat' | 'percentage'; // Flat amount or percentage of charge
+  lateFeeAmount?: number; // Flat amount in cents, or percentage (e.g., 5 for 5%)
+  lateFeeMaxAmount?: number; // Max late fee in cents (for percentage type)
+  lateFeeGraceDays?: number; // Days after due date before late fee applies
+  // Reminder settings
+  reminderEnabled?: boolean;
+  reminderDaysBefore?: number[]; // Days before due date to send reminders (e.g., [7, 3, 1])
 }
 
 /**

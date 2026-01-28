@@ -19,6 +19,7 @@ export interface Lease {
   status: LeaseStatus;
   terms?: LeaseTerms;
   renewalOf?: string; // Previous lease ID if renewal
+  lastChargeGeneratedPeriod?: string; // YYYY-MM - last period for which rent charge was generated
   notes?: string;
   createdAt: Timestamp;
   updatedAt?: Timestamp;
@@ -30,4 +31,49 @@ export interface LeaseTerms {
   parkingSpaces?: number;
   utilitiesIncluded?: string[];
   specialTerms?: string;
+}
+
+/**
+ * Document types for lease-related documents
+ */
+export type LeaseDocumentType =
+  | 'lease_agreement'
+  | 'addendum'
+  | 'move_in_checklist'
+  | 'move_out_checklist'
+  | 'notice'
+  | 'other';
+
+/**
+ * Lease Document - file attached to a lease
+ */
+export interface LeaseDocument {
+  id: string;
+  llcId: string;
+  leaseId: string;
+  type: LeaseDocumentType;
+  title: string;
+  fileName: string;
+  storagePath: string; // Path in Firebase Storage
+  contentType: string; // MIME type
+  sizeBytes: number;
+  generatedFromTemplate?: string; // Template ID if generated
+  uploadedByUserId: string;
+  createdAt: Timestamp;
+}
+
+/**
+ * Lease Template - reusable document template with placeholders
+ */
+export interface LeaseTemplate {
+  id: string;
+  llcId: string;
+  name: string;
+  type: LeaseDocumentType;
+  description?: string;
+  templateContent: string; // HTML with {{placeholders}}
+  isDefault: boolean; // Default template for this type
+  createdByUserId: string;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
 }

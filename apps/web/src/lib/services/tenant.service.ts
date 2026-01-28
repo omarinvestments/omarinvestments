@@ -3,7 +3,6 @@ import { FieldValue } from 'firebase-admin/firestore';
 
 export interface CreateResidentialTenantInput {
   type: 'residential';
-  propertyId: string;
   firstName: string;
   lastName: string;
   email: string;
@@ -20,7 +19,6 @@ export interface CreateResidentialTenantInput {
 
 export interface CreateCommercialTenantInput {
   type: 'commercial';
-  propertyId: string;
   businessName: string;
   dba?: string;
   businessType: string;
@@ -39,9 +37,17 @@ export interface CreateCommercialTenantInput {
 
 export type CreateTenantInput = CreateResidentialTenantInput | CreateCommercialTenantInput;
 
+export interface TenantData {
+  id: string;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  businessName?: string;
+  [key: string]: unknown;
+}
+
 export interface UpdateTenantInput {
   type: 'residential' | 'commercial';
-  propertyId?: string;
   email?: string;
   phone?: string;
   notes?: string;
@@ -70,32 +76,27 @@ export interface UpdateTenantInput {
 }
 
 /**
- * Create a new tenant under an LLC
+ * Create a new global tenant
  */
 export async function createTenant(
-  llcId: string,
   input: CreateTenantInput,
   actorUserId: string
 ) {
-  const tenantRef = adminDb.collection('llcs').doc(llcId).collection('tenants').doc();
-  const auditRef = adminDb.collection('llcs').doc(llcId).collection('auditLogs').doc();
+  const tenantRef = adminDb.collection('tenants').doc();
 
   const baseTenantData = {
-    llcId,
-    propertyId: input.propertyId,
     type: input.type,
     email: input.email,
     phone: input.phone || null,
     notes: input.notes || null,
-    leaseIds: [],
     stripeCustomerId: null,
     userId: null,
     createdAt: FieldValue.serverTimestamp(),
     createdBy: actorUserId,
+    updates: [],
   };
 
   let tenantData: Record<string, unknown>;
-  let auditSummary: Record<string, unknown>;
 
   if (input.type === 'residential') {
     tenantData = {
@@ -106,7 +107,6 @@ export async function createTenant(
       ssn4: input.ssn4 || null,
       emergencyContact: input.emergencyContact || null,
     };
-    auditSummary = { name: `${input.firstName} ${input.lastName}`, type: 'residential' };
   } else {
     tenantData = {
       ...baseTenantData,
@@ -117,22 +117,9 @@ export async function createTenant(
       stateOfIncorporation: input.stateOfIncorporation || null,
       primaryContact: input.primaryContact,
     };
-    auditSummary = { name: input.businessName, type: 'commercial' };
   }
 
-  const batch = adminDb.batch();
-  batch.set(tenantRef, tenantData);
-  batch.set(auditRef, {
-    actorUserId,
-    action: 'create',
-    entityType: 'tenant',
-    entityId: tenantRef.id,
-    entityPath: `llcs/${llcId}/tenants/${tenantRef.id}`,
-    changes: { after: auditSummary },
-    createdAt: FieldValue.serverTimestamp(),
-  });
-
-  await batch.commit();
+  await tenantRef.set(tenantData);
   return { id: tenantRef.id, ...tenantData };
 }
 
@@ -140,12 +127,11 @@ export async function createTenant(
  * Update an existing tenant
  */
 export async function updateTenant(
-  llcId: string,
   tenantId: string,
   input: UpdateTenantInput,
   actorUserId: string
 ) {
-  const tenantRef = adminDb.collection('llcs').doc(llcId).collection('tenants').doc(tenantId);
+  const tenantRef = adminDb.collection('tenants').doc(tenantId);
   const tenantDoc = await tenantRef.get();
 
   if (!tenantDoc.exists) {
@@ -153,12 +139,9 @@ export async function updateTenant(
   }
 
   const currentData = tenantDoc.data();
-  const updateData: Record<string, unknown> = {
-    updatedAt: FieldValue.serverTimestamp(),
-  };
+  const updateData: Record<string, unknown> = {};
 
   // Shared fields
-  if (input.propertyId !== undefined) updateData.propertyId = input.propertyId;
   if (input.email !== undefined) updateData.email = input.email;
   if (input.phone !== undefined) updateData.phone = input.phone;
   if (input.notes !== undefined) updateData.notes = input.notes;
@@ -179,31 +162,179 @@ export async function updateTenant(
     if (input.primaryContact !== undefined) updateData.primaryContact = input.primaryContact;
   }
 
-  const auditRef = adminDb.collection('llcs').doc(llcId).collection('auditLogs').doc();
-  const batch = adminDb.batch();
+  // Add update record to the updates array
+  const updateRecord = {
+    updatedAt: FieldValue.serverTimestamp(),
+    updatedBy: actorUserId,
+  };
 
-  batch.update(tenantRef, updateData);
-  batch.set(auditRef, {
-    actorUserId,
-    action: 'update',
-    entityType: 'tenant',
-    entityId: tenantId,
-    entityPath: `llcs/${llcId}/tenants/${tenantId}`,
-    changes: {
-      before: { email: currentData?.email, type: currentData?.type },
-      after: updateData,
-    },
-    createdAt: FieldValue.serverTimestamp(),
+  await tenantRef.update({
+    ...updateData,
+    updates: FieldValue.arrayUnion(updateRecord),
   });
 
-  await batch.commit();
   return { id: tenantId, ...currentData, ...updateData };
 }
 
 /**
- * Get a single tenant
+ * Get a single tenant by ID
  */
-export async function getTenant(llcId: string, tenantId: string) {
+export async function getTenant(tenantId: string) {
+  const tenantRef = adminDb.collection('tenants').doc(tenantId);
+  const tenantDoc = await tenantRef.get();
+
+  if (!tenantDoc.exists) {
+    return null;
+  }
+
+  return { id: tenantDoc.id, ...tenantDoc.data() };
+}
+
+/**
+ * Get multiple tenants by their IDs
+ */
+export async function getTenantsByIds(tenantIds: string[]) {
+  if (tenantIds.length === 0) {
+    return [];
+  }
+
+  // Firestore 'in' queries support max 30 items
+  const chunks: string[][] = [];
+  for (let i = 0; i < tenantIds.length; i += 30) {
+    chunks.push(tenantIds.slice(i, i + 30));
+  }
+
+  const results: Array<{ id: string; [key: string]: unknown }> = [];
+
+  for (const chunk of chunks) {
+    const snapshot = await adminDb
+      .collection('tenants')
+      .where('__name__', 'in', chunk)
+      .get();
+
+    snapshot.docs.forEach((doc) => {
+      results.push({ id: doc.id, ...doc.data() });
+    });
+  }
+
+  return results;
+}
+
+/**
+ * List all tenants created by a specific user
+ */
+export async function listTenants(createdByUserId: string) {
+  const snapshot = await adminDb
+    .collection('tenants')
+    .where('createdBy', '==', createdByUserId)
+    .orderBy('createdAt', 'desc')
+    .get();
+
+  return snapshot.docs.map((doc) => ({
+    id: doc.id,
+    ...doc.data(),
+  }));
+}
+
+/**
+ * List all tenants (admin-level access for searching across all tenants)
+ */
+export async function listAllTenants(limit = 100) {
+  const snapshot = await adminDb
+    .collection('tenants')
+    .orderBy('createdAt', 'desc')
+    .limit(limit)
+    .get();
+
+  return snapshot.docs.map((doc) => ({
+    id: doc.id,
+    ...doc.data(),
+  }));
+}
+
+/**
+ * Search tenants by name or email
+ */
+export async function searchTenants(query: string, limit = 50) {
+  const lowerQuery = query.toLowerCase();
+
+  // Firestore doesn't support full-text search, so we'll fetch and filter client-side
+  // For production, consider using Algolia, Elasticsearch, or Firebase Extensions
+  const snapshot = await adminDb
+    .collection('tenants')
+    .orderBy('createdAt', 'desc')
+    .limit(500) // Fetch more to filter
+    .get();
+
+  const results = snapshot.docs
+    .map((doc): TenantData => ({ id: doc.id, ...doc.data() }))
+    .filter((tenant) => {
+      const email = (tenant.email || '').toLowerCase();
+      const firstName = (tenant.firstName || '').toLowerCase();
+      const lastName = (tenant.lastName || '').toLowerCase();
+      const businessName = (tenant.businessName || '').toLowerCase();
+      const fullName = `${firstName} ${lastName}`.trim();
+
+      return (
+        email.includes(lowerQuery) ||
+        firstName.includes(lowerQuery) ||
+        lastName.includes(lowerQuery) ||
+        fullName.includes(lowerQuery) ||
+        businessName.includes(lowerQuery)
+      );
+    })
+    .slice(0, limit);
+
+  return results;
+}
+
+/**
+ * Delete a tenant (hard delete)
+ * Note: Should verify no active leases reference this tenant before calling
+ */
+export async function deleteTenant(
+  tenantId: string,
+  actorUserId: string
+) {
+  const tenantRef = adminDb.collection('tenants').doc(tenantId);
+  const tenantDoc = await tenantRef.get();
+
+  if (!tenantDoc.exists) {
+    throw new Error('Tenant not found');
+  }
+
+  // Check if any leases reference this tenant
+  const leasesSnapshot = await adminDb
+    .collectionGroup('leases')
+    .where('tenantIds', 'array-contains', tenantId)
+    .where('status', 'in', ['draft', 'active'])
+    .limit(1)
+    .get();
+
+  if (!leasesSnapshot.empty) {
+    throw new Error('Cannot delete tenant with active leases. Remove lease associations first.');
+  }
+
+  await tenantRef.delete();
+  return { id: tenantId, deleted: true, deletedBy: actorUserId };
+}
+
+// ============================================
+// Legacy functions for backward compatibility
+// These can be removed after migration is complete
+// ============================================
+
+/**
+ * @deprecated Use getTenant(tenantId) instead
+ */
+export async function getTenantLegacy(llcId: string, tenantId: string) {
+  // First try global collection
+  const globalTenant = await getTenant(tenantId);
+  if (globalTenant) {
+    return globalTenant;
+  }
+
+  // Fall back to legacy LLC-scoped collection
   const tenantRef = adminDb.collection('llcs').doc(llcId).collection('tenants').doc(tenantId);
   const tenantDoc = await tenantRef.get();
 
@@ -215,65 +346,18 @@ export async function getTenant(llcId: string, tenantId: string) {
 }
 
 /**
- * List all tenants for an LLC, optionally filtered by propertyId
+ * @deprecated Use listTenants(createdByUserId) instead
  */
-export async function listTenants(llcId: string, propertyId?: string) {
-  let query = adminDb
+export async function listTenantsLegacy(llcId: string) {
+  const snapshot = await adminDb
     .collection('llcs')
     .doc(llcId)
     .collection('tenants')
-    .orderBy('createdAt', 'desc') as FirebaseFirestore.Query;
-
-  if (propertyId) {
-    query = query.where('propertyId', '==', propertyId);
-  }
-
-  const snapshot = await query.get();
+    .orderBy('createdAt', 'desc')
+    .get();
 
   return snapshot.docs.map((doc) => ({
     id: doc.id,
     ...doc.data(),
   }));
-}
-
-/**
- * Delete a tenant (hard delete — only if no active leases)
- */
-export async function deleteTenant(
-  llcId: string,
-  tenantId: string,
-  actorUserId: string
-) {
-  const tenantRef = adminDb.collection('llcs').doc(llcId).collection('tenants').doc(tenantId);
-  const tenantDoc = await tenantRef.get();
-
-  if (!tenantDoc.exists) {
-    throw new Error('Tenant not found');
-  }
-
-  const tenantData = tenantDoc.data();
-
-  // Check for active leases
-  if (tenantData?.leaseIds && tenantData.leaseIds.length > 0) {
-    throw new Error('Cannot delete tenant with active leases. Remove lease associations first.');
-  }
-
-  const auditRef = adminDb.collection('llcs').doc(llcId).collection('auditLogs').doc();
-  const batch = adminDb.batch();
-
-  batch.delete(tenantRef);
-  batch.set(auditRef, {
-    actorUserId,
-    action: 'delete',
-    entityType: 'tenant',
-    entityId: tenantId,
-    entityPath: `llcs/${llcId}/tenants/${tenantId}`,
-    changes: {
-      before: { email: tenantData?.email, type: tenantData?.type },
-    },
-    createdAt: FieldValue.serverTimestamp(),
-  });
-
-  await batch.commit();
-  return { id: tenantId, deleted: true };
 }

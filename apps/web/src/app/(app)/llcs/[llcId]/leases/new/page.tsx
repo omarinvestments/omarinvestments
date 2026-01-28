@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { use } from 'react';
+import { TenantSelectorDialog, TenantOption } from '@/components/TenantSelectorDialog';
 
 interface PropertyOption {
   id: string;
@@ -17,22 +18,13 @@ interface UnitOption {
   status: string;
 }
 
-interface TenantOption {
-  id: string;
-  type: 'residential' | 'commercial';
-  firstName?: string;
-  lastName?: string;
-  businessName?: string;
-  email: string;
-}
-
 interface NewLeasePageProps {
   params: Promise<{ llcId: string }>;
 }
 
 function getTenantLabel(t: TenantOption): string {
   if (t.type === 'commercial') return t.businessName || t.email;
-  return `${t.firstName} ${t.lastName}`;
+  return `${t.firstName || ''} ${t.lastName || ''}`.trim() || t.email;
 }
 
 export default function NewLeasePage({ params }: NewLeasePageProps) {
@@ -42,12 +34,14 @@ export default function NewLeasePage({ params }: NewLeasePageProps) {
   // Selectors
   const [properties, setProperties] = useState<PropertyOption[]>([]);
   const [units, setUnits] = useState<UnitOption[]>([]);
-  const [tenants, setTenants] = useState<TenantOption[]>([]);
+
+  // Tenant selection
+  const [selectedTenants, setSelectedTenants] = useState<TenantOption[]>([]);
+  const [tenantDialogOpen, setTenantDialogOpen] = useState(false);
 
   // Form fields
   const [propertyId, setPropertyId] = useState('');
   const [unitId, setUnitId] = useState('');
-  const [selectedTenantIds, setSelectedTenantIds] = useState<string[]>([]);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [rentAmount, setRentAmount] = useState('');
@@ -63,20 +57,14 @@ export default function NewLeasePage({ params }: NewLeasePageProps) {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // Load properties and tenants on mount
+  // Load properties on mount
   useEffect(() => {
-    async function loadData() {
-      const [propsRes, tenantsRes] = await Promise.all([
-        fetch(`/api/llcs/${llcId}/properties`),
-        fetch(`/api/llcs/${llcId}/tenants`),
-      ]);
-      const propsData = await propsRes.json();
-      const tenantsData = await tenantsRes.json();
-
-      if (propsData.ok) setProperties(propsData.data);
-      if (tenantsData.ok) setTenants(tenantsData.data);
+    async function loadProperties() {
+      const res = await fetch(`/api/llcs/${llcId}/properties`);
+      const data = await res.json();
+      if (data.ok) setProperties(data.data);
     }
-    loadData();
+    loadProperties();
   }, [llcId]);
 
   // Load units when property changes
@@ -94,20 +82,25 @@ export default function NewLeasePage({ params }: NewLeasePageProps) {
     loadUnits();
   }, [llcId, propertyId]);
 
-  const toggleTenant = (tenantId: string) => {
-    setSelectedTenantIds((prev) =>
-      prev.includes(tenantId)
-        ? prev.filter((id) => id !== tenantId)
-        : [...prev, tenantId]
-    );
-  };
+  const handleAddTenant = useCallback((tenant: TenantOption) => {
+    setSelectedTenants((prev) => {
+      if (prev.some((t) => t.id === tenant.id)) {
+        return prev;
+      }
+      return [...prev, tenant];
+    });
+  }, []);
+
+  const handleRemoveTenant = useCallback((tenantId: string) => {
+    setSelectedTenants((prev) => prev.filter((t) => t.id !== tenantId));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSaving(true);
 
-    if (selectedTenantIds.length === 0) {
+    if (selectedTenants.length === 0) {
       setError('At least one tenant must be selected');
       setSaving(false);
       return;
@@ -129,7 +122,7 @@ export default function NewLeasePage({ params }: NewLeasePageProps) {
         body: JSON.stringify({
           propertyId,
           unitId,
-          tenantIds: selectedTenantIds,
+          tenantIds: selectedTenants.map((t) => t.id),
           startDate: new Date(startDate).toISOString(),
           endDate: new Date(endDate).toISOString(),
           rentAmount: Math.round(parseFloat(rentAmount) * 100),
@@ -224,27 +217,72 @@ export default function NewLeasePage({ params }: NewLeasePageProps) {
 
         {/* Tenants */}
         <div className="space-y-4">
-          <h2 className="text-lg font-medium">Tenant(s) *</h2>
-          {tenants.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No tenants available. Create tenants first.</p>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-medium">Tenant(s) *</h2>
+            <button
+              type="button"
+              onClick={() => setTenantDialogOpen(true)}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              Add Tenant
+            </button>
+          </div>
+
+          {selectedTenants.length === 0 ? (
+            <div className="border border-dashed rounded-md p-6 text-center text-muted-foreground">
+              <p>No tenants selected</p>
+              <p className="text-sm mt-1">Click &quot;Add Tenant&quot; to search and add tenants to this lease</p>
+            </div>
           ) : (
-            <div className="border rounded-md max-h-48 overflow-y-auto divide-y">
-              {tenants.map((t) => (
-                <label
-                  key={t.id}
-                  className="flex items-center gap-3 px-3 py-2 hover:bg-secondary/30 cursor-pointer"
+            <div className="border rounded-md divide-y">
+              {selectedTenants.map((tenant) => (
+                <div
+                  key={tenant.id}
+                  className="flex items-center justify-between px-3 py-2"
                 >
-                  <input
-                    type="checkbox"
-                    checked={selectedTenantIds.includes(t.id)}
-                    onChange={() => toggleTenant(t.id)}
-                    className="w-4 h-4 rounded border-input"
-                  />
-                  <span className="text-sm">
-                    {getTenantLabel(t)}
-                    <span className="text-muted-foreground ml-2 text-xs">({t.type})</span>
-                  </span>
-                </label>
+                  <div className="min-w-0 flex-1">
+                    <span className="font-medium">{getTenantLabel(tenant)}</span>
+                    <span className="text-muted-foreground text-sm ml-2">
+                      ({tenant.type})
+                    </span>
+                    <span className="text-muted-foreground text-sm ml-2 hidden sm:inline">
+                      {tenant.email}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveTenant(tenant.id)}
+                    className="p-1 text-muted-foreground hover:text-destructive transition-colors"
+                    title="Remove tenant"
+                  >
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M6 18L18 6M6 6l12 12"
+                      />
+                    </svg>
+                  </button>
+                </div>
               ))}
             </div>
           )}
@@ -442,7 +480,7 @@ export default function NewLeasePage({ params }: NewLeasePageProps) {
         <div className="flex gap-3 pt-4">
           <button
             type="submit"
-            disabled={saving || !propertyId || !unitId || !startDate || !endDate || !rentAmount || selectedTenantIds.length === 0}
+            disabled={saving || !propertyId || !unitId || !startDate || !endDate || !rentAmount || selectedTenants.length === 0}
             className="px-6 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity disabled:opacity-50"
           >
             {saving ? 'Creating...' : 'Create Lease'}
@@ -455,6 +493,15 @@ export default function NewLeasePage({ params }: NewLeasePageProps) {
           </Link>
         </div>
       </form>
+
+      {/* Tenant Selector Dialog */}
+      <TenantSelectorDialog
+        open={tenantDialogOpen}
+        onClose={() => setTenantDialogOpen(false)}
+        onSelect={handleAddTenant}
+        selectedIds={selectedTenants.map((t) => t.id)}
+        llcId={llcId}
+      />
     </div>
   );
 }

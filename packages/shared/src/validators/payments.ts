@@ -59,3 +59,28 @@ export const paymentApplicationSchema = z.object({
   chargeId: z.string().min(1),
   amount: z.number().positive(), // In cents
 });
+
+/**
+ * Schema for manually recording a payment (cash, check, etc.)
+ */
+export const recordPaymentSchema = z.object({
+  leaseId: z.string().min(1),
+  tenantId: z.string().min(1),
+  amount: z.number().positive(), // Total payment amount in cents
+  paymentMethod: z.enum(['cash', 'check', 'money_order', 'bank_transfer', 'other']),
+  checkNumber: z.string().max(50).optional(),
+  memo: z.string().max(500).optional(),
+  paymentDate: z.string().datetime().optional(), // ISO date, defaults to now
+  chargeAllocations: z.array(paymentApplicationSchema).optional(), // How to apply payment to charges
+});
+
+export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>;
+
+/**
+ * Schema for voiding a charge
+ */
+export const voidChargeSchema = z.object({
+  reason: z.string().min(1).max(500),
+});
+
+export type VoidChargeInput = z.infer<typeof voidChargeSchema>;

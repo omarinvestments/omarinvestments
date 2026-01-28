@@ -42,3 +42,19 @@ export const updateLeaseSchema = z.object({
   terms: leaseTermsSchema.optional(),
   notes: z.string().max(2000).optional(),
 });
+
+/**
+ * Schema for renewing a lease - creates a new lease linked to the original
+ */
+export const renewLeaseSchema = z.object({
+  startDate: z.string().min(1), // New lease start date (typically day after old lease ends)
+  endDate: z.string().min(1), // New lease end date
+  rentAmount: z.number().positive(), // New rent amount (may differ from original)
+  rentChangeReason: z.string().max(500).optional(), // Reason for rent change if different
+  dueDay: z.number().int().min(1).max(28).optional(), // Keep same or change
+  depositAmount: z.number().nonnegative().optional(), // Additional deposit if needed
+  terms: leaseTermsSchema.optional(), // Can update terms
+  notes: z.string().max(2000).optional(),
+});
+
+export type RenewLeaseInput = z.infer<typeof renewLeaseSchema>;

@@ -11,21 +11,27 @@ export type TenantType = 'residential' | 'commercial';
 export type BusinessType = 'llc' | 'corporation' | 'sole_proprietorship' | 'partnership' | 'nonprofit' | 'other';
 
 /**
+ * Record of a tenant update for audit trail
+ */
+export interface TenantUpdate {
+  updatedAt: Timestamp;
+  updatedBy: string; // Firebase Auth UID of user who made the update
+}
+
+/**
  * Base tenant fields shared by both types
  */
 export interface BaseTenant {
   id: string;
-  llcId: string;
-  propertyId: string;
   type: TenantType;
   userId?: string; // Firebase Auth UID if tenant has portal login
-  leaseIds?: string[]; // Associated lease IDs (kept in sync with Lease.tenantIds)
   stripeCustomerId?: string; // Stripe Customer ID for payment methods
   email: string;
   phone?: string;
   notes?: string;
   createdAt: Timestamp;
-  updatedAt?: Timestamp;
+  createdBy: string; // Firebase Auth UID of user who created this tenant
+  updates?: TenantUpdate[]; // Audit trail of updates
 }
 
 /**
@@ -73,9 +79,9 @@ export interface PrimaryContact {
 
 /**
  * Tenant user ID mapping (for tenant portal access)
+ * Links a Firebase Auth user to their tenant record
  */
 export interface TenantUserMapping {
   tenantId: string;
-  llcId: string;
-  propertyId: string;
+  userId: string; // Firebase Auth UID
 }

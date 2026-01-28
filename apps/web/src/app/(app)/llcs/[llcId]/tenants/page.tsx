@@ -1,8 +1,14 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { use } from 'react';
+import {
+  SearchFilter,
+  TENANT_FILTERS,
+  FilterValues,
+  filterByField,
+} from '@/components/SearchFilter';
 
 interface TenantItem {
   id: string;
@@ -10,6 +16,7 @@ interface TenantItem {
   email: string;
   phone?: string;
   propertyId: string;
+  leaseIds?: string[];
   // Residential
   firstName?: string;
   lastName?: string;
@@ -35,6 +42,11 @@ export default function TenantsPage({ params }: TenantsPageProps) {
   const [tenants, setTenants] = useState<TenantItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [filters, setFilters] = useState<FilterValues>({
+    search: '',
+    type: '',
+    hasActiveLease: '',
+  });
 
   const fetchTenants = useCallback(async () => {
     try {
@@ -56,6 +68,38 @@ export default function TenantsPage({ params }: TenantsPageProps) {
   useEffect(() => {
     fetchTenants();
   }, [fetchTenants]);
+
+  // Apply filters
+  const filteredTenants = useMemo(() => {
+    let result = tenants;
+
+    // Text search across name, email, phone
+    if (filters.search.trim()) {
+      const lowerSearch = filters.search.toLowerCase();
+      result = result.filter((tenant) => {
+        const displayName = getTenantDisplayName(tenant).toLowerCase();
+        const email = (tenant.email || '').toLowerCase();
+        const phone = (tenant.phone || '').toLowerCase();
+        return (
+          displayName.includes(lowerSearch) ||
+          email.includes(lowerSearch) ||
+          phone.includes(lowerSearch)
+        );
+      });
+    }
+
+    // Filter by type
+    result = filterByField(result, 'type', filters.type);
+
+    // Filter by lease status
+    if (filters.hasActiveLease === 'active') {
+      result = result.filter((t) => t.leaseIds && t.leaseIds.length > 0);
+    } else if (filters.hasActiveLease === 'inactive') {
+      result = result.filter((t) => !t.leaseIds || t.leaseIds.length === 0);
+    }
+
+    return result;
+  }, [tenants, filters]);
 
   const handleDelete = async (tenantId: string, name: string) => {
     if (!confirm(`Are you sure you want to delete "${name}"? This cannot be undone.`)) {
@@ -98,6 +142,22 @@ export default function TenantsPage({ params }: TenantsPageProps) {
         </Link>
       </div>
 
+      {/* Search & Filters */}
+      <SearchFilter
+        filters={TENANT_FILTERS}
+        values={filters}
+        onChange={setFilters}
+        searchPlaceholder="Search name, email, phone..."
+        className="mb-6"
+      />
+
+      {/* Results count */}
+      {tenants.length > 0 && (
+        <div className="text-sm text-muted-foreground mb-4">
+          Showing {filteredTenants.length} of {tenants.length} tenants
+        </div>
+      )}
+
       {tenants.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-muted-foreground mb-4">
@@ -109,6 +169,12 @@ export default function TenantsPage({ params }: TenantsPageProps) {
           >
             Add Tenant
           </Link>
+        </div>
+      ) : filteredTenants.length === 0 ? (
+        <div className="text-center py-12 border rounded-lg">
+          <p className="text-muted-foreground">
+            No tenants match your filters.
+          </p>
         </div>
       ) : (
         <div className="border rounded-lg overflow-hidden">
@@ -123,7 +189,7 @@ export default function TenantsPage({ params }: TenantsPageProps) {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {tenants.map((tenant) => {
+              {filteredTenants.map((tenant) => {
                 const displayName = getTenantDisplayName(tenant);
                 return (
                   <tr key={tenant.id} className="hover:bg-secondary/30 transition-colors">

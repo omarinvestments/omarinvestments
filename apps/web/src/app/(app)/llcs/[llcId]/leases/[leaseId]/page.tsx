@@ -28,8 +28,9 @@ export default function EditLeasePage({ params }: EditLeasePageProps) {
 
   // Read-only display info
   const [tenantCount, setTenantCount] = useState(0);
-  const [propertyId, setPropertyId] = useState('');
-  const [unitId, setUnitId] = useState('');
+  const [tenantNames, setTenantNames] = useState<string[]>([]);
+  const [propertyName, setPropertyName] = useState('');
+  const [unitNumber, setUnitNumber] = useState('');
 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -44,8 +45,6 @@ export default function EditLeasePage({ params }: EditLeasePageProps) {
 
         if (data.ok) {
           const l = data.data;
-          setPropertyId(l.propertyId || '');
-          setUnitId(l.unitId || '');
           setTenantCount(l.tenantIds?.length || 0);
           setStartDate(l.startDate ? l.startDate.split('T')[0] : '');
           setEndDate(l.endDate ? l.endDate.split('T')[0] : '');
@@ -59,6 +58,48 @@ export default function EditLeasePage({ params }: EditLeasePageProps) {
           setUtilitiesIncluded(l.terms?.utilitiesIncluded?.join(', ') || '');
           setSpecialTerms(l.terms?.specialTerms || '');
           setNotes(l.notes || '');
+
+          // Fetch property to get name and unit number
+          if (l.propertyId) {
+            try {
+              const propRes = await fetch(`/api/llcs/${llcId}/properties/${l.propertyId}`);
+              const propData = await propRes.json();
+              const unitRes = await fetch(`/api/llcs/${llcId}/properties/${l.propertyId}/units/${l.unitId}`);
+              const unitData = await unitRes.json();
+              if (propData.ok) {
+                const property = propData.data;
+                setPropertyName(property.name || property.address?.street1 || 'Unknown Property');
+              }
+              if (unitData.ok) {
+                const unit = unitData.data;
+                setUnitNumber(unit.unitNumber || '-');
+              }
+            } catch {
+              setPropertyName('Unknown Property');
+              setUnitNumber('—');
+            }
+          }
+          // Fetch Tenant Info (using global tenant API)
+          if (l.tenantIds && l.tenantIds.length > 0) {
+            try {
+              const tenantPromises = l.tenantIds.map((tenantId: string) =>
+                fetch(`/api/tenants/${tenantId}`).then((res) => res.json())
+              );
+              const tenantResults = await Promise.all(tenantPromises);
+              const names = tenantResults
+                .filter((result) => result.ok)
+                .map((result) => {
+                  const t = result.data;
+                  if (t.type === 'commercial') {
+                    return t.businessName || 'Unknown Business';
+                  }
+                  return `${t.firstName || ''} ${t.lastName || ''}`.trim() || 'Unknown Tenant';
+                });
+              setTenantNames(names);
+            } catch {
+              setTenantNames([]);
+            }
+          }
         } else {
           setError(data.error?.message || 'Failed to load lease');
         }
@@ -154,10 +195,49 @@ export default function EditLeasePage({ params }: EditLeasePageProps) {
       <h1 className="text-2xl font-bold mb-6">Edit Lease</h1>
 
       {/* Read-only context */}
-      <div className="mb-6 p-4 bg-secondary/30 rounded-md text-sm space-y-1">
-        <div><span className="text-muted-foreground">Property:</span> {propertyId}</div>
-        <div><span className="text-muted-foreground">Unit:</span> {unitId}</div>
-        <div><span className="text-muted-foreground">Tenants:</span> {tenantCount} assigned</div>
+      <div className="mb-6 p-4 bg-secondary/30 rounded-md text-sm space-y-2">
+        <div><span className="text-muted-foreground">Property:</span> {propertyName || 'Loading...'}</div>
+        <div><span className="text-muted-foreground">Unit:</span> {unitNumber || 'Loading...'}</div>
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground">Tenant{tenantCount > 1 ? 's' : ''}:</span>
+          <span>{tenantNames.length > 0 ? tenantNames.join(', ') : 'None assigned'}</span>
+          <Link
+            href="/tenants/new"
+            className="ml-2 text-xs text-primary hover:underline"
+          >
+            + Add Tenant
+          </Link>
+        </div>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="mb-6 flex flex-wrap gap-3">
+        <Link
+          href={`/llcs/${llcId}/leases/${leaseId}/charges`}
+          className="px-4 py-2 border rounded-md hover:bg-secondary transition-colors text-sm"
+        >
+          Charges & Balance
+        </Link>
+        <Link
+          href={`/llcs/${llcId}/leases/${leaseId}/payments`}
+          className="px-4 py-2 border rounded-md hover:bg-secondary transition-colors text-sm"
+        >
+          Payment History
+        </Link>
+        <Link
+          href={`/llcs/${llcId}/leases/${leaseId}/documents`}
+          className="px-4 py-2 border rounded-md hover:bg-secondary transition-colors text-sm"
+        >
+          Documents
+        </Link>
+        {status === 'active' && (
+          <Link
+            href={`/llcs/${llcId}/leases/${leaseId}/renew`}
+            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm"
+          >
+            Renew Lease
+          </Link>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">

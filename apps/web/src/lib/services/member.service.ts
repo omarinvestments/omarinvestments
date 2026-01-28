@@ -220,8 +220,12 @@ export async function updateMember(
   if (!memberDoc.exists) {
     throw new Error('NOT_FOUND: Member not found');
   }
+  
+  const currentData = memberDoc.data();
 
-  const currentData = memberDoc.data()!;
+  if (!currentData) {
+    throw new Error('NOT_FOUND: No member data found for this LLC.');
+  }
 
   // If changing role from admin or disabling an admin, check last-admin constraint
   const isDemotingAdmin =
@@ -302,7 +306,11 @@ export async function removeMember(
     throw new Error('NOT_FOUND: Member not found');
   }
 
-  const currentData = memberDoc.data()!;
+  const currentData = memberDoc.data();
+
+  if (!currentData) {
+    throw new Error('NOT_FOUND: No member data found for this LLC.');
+  }
 
   // Cannot remove last admin
   if (currentData.role === 'admin' && currentData.status === 'active') {
@@ -377,7 +385,10 @@ export async function listPendingInvitations(userId: string): Promise<PendingInv
     const data = doc.data();
     // Extract llcId from the document path: llcs/{llcId}/members/{userId}
     const pathParts = doc.ref.path.split('/');
-    const llcId = pathParts[1]!; // Path is always llcs/{llcId}/members/{userId}
+    const llcId = pathParts[1]; // Path is always llcs/{llcId}/members/{userId}
+    if (!llcId) {
+      throw new Error('INVALID_PATH: Unable to extract LLC ID from member document path.');
+    }
 
     // Fetch LLC name
     const llcDoc = await adminDb.collection('llcs').doc(llcId).get();
@@ -427,7 +438,10 @@ export async function acceptInvitation(
     throw new Error('NOT_FOUND: No invitation found for this LLC.');
   }
 
-  const data = memberDoc.data()!;
+  const data = memberDoc.data();
+  if (!data) {
+    throw new Error('NOT_FOUND: No invitation data found for this LLC.');
+  }
 
   if (data.status !== 'invited') {
     throw new Error('INVALID_STATUS: This invitation has already been processed.');
@@ -485,7 +499,11 @@ export async function declineInvitation(
     throw new Error('NOT_FOUND: No invitation found for this LLC.');
   }
 
-  const data = memberDoc.data()!;
+  const data = memberDoc.data();
+
+  if (!data) {
+    throw new Error('NOT_FOUND: No invitation data found for this LLC.');
+  }
 
   if (data.status !== 'invited') {
     throw new Error('INVALID_STATUS: This invitation has already been processed.');

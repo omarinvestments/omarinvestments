@@ -1,8 +1,21 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { use } from 'react';
+import {
+  SearchFilter,
+  LEGAL_CASE_FILTERS,
+  FilterValues,
+  filterBySearch,
+  filterByField,
+} from '@/components/SearchFilter';
+
+interface OpposingParty {
+  type: 'tenant' | 'other';
+  tenantId?: string;
+  name?: string;
+}
 
 interface CaseItem {
   id: string;
@@ -11,9 +24,14 @@ interface CaseItem {
   docketNumber?: string;
   caseType: string;
   status: string;
-  opposingParty?: string;
+  opposingParty?: OpposingParty;
   nextHearingDate?: string;
   createdAt: string;
+}
+
+function getOpposingPartyName(party?: OpposingParty): string {
+  if (!party) return '—';
+  return party.name || '—';
 }
 
 interface LegalPageProps {
@@ -51,6 +69,11 @@ export default function LegalPage({ params }: LegalPageProps) {
   const [cases, setCases] = useState<CaseItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [filters, setFilters] = useState<FilterValues>({
+    search: '',
+    status: '',
+    caseType: '',
+  });
 
   const fetchCases = useCallback(async () => {
     try {
@@ -72,6 +95,27 @@ export default function LegalPage({ params }: LegalPageProps) {
   useEffect(() => {
     fetchCases();
   }, [fetchCases]);
+
+  // Apply filters to cases
+  const filteredCases = useMemo(() => {
+    let result = cases;
+
+    // Text search across court, docketNumber, jurisdiction, opposingParty
+    result = filterBySearch(result, filters.search, [
+      'court',
+      'docketNumber',
+      'jurisdiction',
+      'opposingParty.name',
+    ]);
+
+    // Filter by status
+    result = filterByField(result, 'status', filters.status);
+
+    // Filter by case type
+    result = filterByField(result, 'caseType', filters.caseType);
+
+    return result;
+  }, [cases, filters]);
 
   const handleDelete = async (caseId: string, court: string) => {
     if (!confirm(`Are you sure you want to delete the case at "${court}"? This cannot be undone.`)) {
@@ -112,6 +156,22 @@ export default function LegalPage({ params }: LegalPageProps) {
         </Link>
       </div>
 
+      {/* Search & Filters */}
+      <SearchFilter
+        filters={LEGAL_CASE_FILTERS}
+        values={filters}
+        onChange={setFilters}
+        searchPlaceholder="Search court, docket number..."
+        className="mb-6"
+      />
+
+      {/* Results count */}
+      {cases.length > 0 && (
+        <div className="text-sm text-muted-foreground mb-4">
+          Showing {filteredCases.length} of {cases.length} cases
+        </div>
+      )}
+
       {cases.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-muted-foreground mb-4">
@@ -123,6 +183,12 @@ export default function LegalPage({ params }: LegalPageProps) {
           >
             New Case
           </Link>
+        </div>
+      ) : filteredCases.length === 0 ? (
+        <div className="text-center py-12 border rounded-lg">
+          <p className="text-muted-foreground">
+            No cases match your filters.
+          </p>
         </div>
       ) : (
         <div className="border rounded-lg overflow-hidden">
@@ -138,7 +204,7 @@ export default function LegalPage({ params }: LegalPageProps) {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {cases.map((c) => (
+              {filteredCases.map((c) => (
                 <tr key={c.id} className="hover:bg-secondary/30 transition-colors">
                   <td className="px-4 py-3">
                     <Link href={`/llcs/${llcId}/legal/${c.id}`} className="hover:underline">
@@ -157,7 +223,7 @@ export default function LegalPage({ params }: LegalPageProps) {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
-                    {c.opposingParty || '—'}
+                    {getOpposingPartyName(c.opposingParty)}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {c.nextHearingDate ? formatDate(c.nextHearingDate) : '—'}

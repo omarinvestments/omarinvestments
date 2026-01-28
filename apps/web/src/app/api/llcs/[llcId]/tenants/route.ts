@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth/requireUser';
 import { requireLlcRole } from '@/lib/auth/requireLlcMember';
-import { createTenant, listTenants } from '@/lib/services/tenant.service';
+import { createTenant, listAllTenants } from '@/lib/services/tenant.service';
 import { createTenantSchema } from '@shared/types';
 
 interface RouteParams {
@@ -12,7 +12,7 @@ interface RouteParams {
  * GET /api/llcs/[llcId]/tenants
  * List all tenants for an LLC (optionally filter by propertyId query param)
  */
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(_request: NextRequest, { params }: RouteParams) {
   const { llcId } = await params;
 
   const user = await getAuthUser();
@@ -26,10 +26,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     await requireLlcRole(llcId, ['admin', 'manager', 'accounting', 'maintenance', 'legal', 'readOnly']);
 
-    const { searchParams } = new URL(request.url);
-    const propertyId = searchParams.get('propertyId') || undefined;
-
-    const tenants = await listTenants(llcId, propertyId);
+    // Tenants are now global - return all tenants
+    const tenants = await listAllTenants();
     return NextResponse.json({ ok: true, data: tenants });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : '';
@@ -75,7 +73,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const tenant = await createTenant(llcId, parsed.data, user.uid);
+    const tenant = await createTenant(parsed.data, user.uid);
     return NextResponse.json({ ok: true, data: tenant }, { status: 201 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : '';

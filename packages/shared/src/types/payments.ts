@@ -13,8 +13,15 @@ export interface Charge {
   type: ChargeType;
   description?: string;
   amount: number; // In cents
+  paidAmount: number; // Amount paid so far in cents (for partial payments)
   status: ChargeStatus;
   dueDate: string; // ISO date
+  linkedChargeId?: string; // For late fees linked to original rent charge
+  lateFeeAppliedAt?: Timestamp; // When late fee was applied to this charge
+  lateFeeChargeId?: string; // ID of the late fee charge created for this charge
+  voidedAt?: Timestamp; // When the charge was voided
+  voidedBy?: string; // User who voided the charge
+  voidReason?: string; // Reason for voiding
   stripeInvoiceId?: string;
   createdAt: Timestamp;
   updatedAt?: Timestamp;
