@@ -7,6 +7,7 @@ import { use } from 'react';
 interface DocumentItem {
   id: string;
   title: string;
+  description?: string;
   type: string;
   fileName: string;
   contentType: string;
@@ -52,6 +53,7 @@ export default function DocumentsPage({ params }: DocumentsPageProps) {
 
   // Upload form state
   const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
   const [docType, setDocType] = useState('filing');
   const [showUpload, setShowUpload] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -123,6 +125,7 @@ export default function DocumentsPage({ params }: DocumentsPageProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: title.trim(),
+          description: description.trim() || undefined,
           type: docType,
           fileName: file.name,
           storagePath,
@@ -136,6 +139,7 @@ export default function DocumentsPage({ params }: DocumentsPageProps) {
       if (metaData.ok) {
         setDocuments((prev) => [metaData.data, ...prev]);
         setTitle('');
+        setDescription('');
         setDocType('filing');
         if (fileInputRef.current) fileInputRef.current.value = '';
         setShowUpload(false);
@@ -214,6 +218,13 @@ export default function DocumentsPage({ params }: DocumentsPageProps) {
               placeholder="e.g. Motion to Dismiss"
               className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
           </div>
+          <div>
+            <label htmlFor="docDescription" className="block text-sm font-medium mb-1">Description</label>
+            <textarea id="docDescription" value={description} onChange={(e) => setDescription(e.target.value)}
+              placeholder="Brief description of the document (optional)"
+              rows={2}
+              className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label htmlFor="docType" className="block text-sm font-medium mb-1">Type</label>
@@ -256,7 +267,12 @@ export default function DocumentsPage({ params }: DocumentsPageProps) {
             <tbody className="divide-y">
               {documents.map((doc) => (
                 <tr key={doc.id} className="hover:bg-secondary/30 transition-colors">
-                  <td className="px-4 py-3 font-medium">{doc.title}</td>
+                  <td className="px-4 py-3">
+                    <div className="font-medium">{doc.title}</div>
+                    {doc.description && (
+                      <div className="text-xs text-muted-foreground mt-0.5">{doc.description}</div>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <span className="inline-block px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700">
                       {DOC_TYPE_LABELS[doc.type] || doc.type}

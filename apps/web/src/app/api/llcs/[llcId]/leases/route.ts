@@ -29,8 +29,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { searchParams } = new URL(request.url);
     const propertyId = searchParams.get('propertyId') || undefined;
     const unitId = searchParams.get('unitId') || undefined;
+    const status = searchParams.get('status') || undefined;
 
-    const leases = await listLeases(llcId, propertyId, unitId);
+    const leases = await listLeases(llcId, propertyId, unitId, status);
     return NextResponse.json({ ok: true, data: leases });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : '';

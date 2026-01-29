@@ -1,37 +1,19 @@
 'use client';
 
-import { useEffect, useState, useCallback, FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { use } from 'react';
 
-interface PlaintiffData {
-  type: 'individual' | 'llc';
-  name?: string;
-  llcId?: string;
-  llcName?: string;
+interface CaseResolution {
+  type: string;
+  date: string;
+  amount?: number;
+  terms?: string;
+  notes?: string;
 }
 
-interface OpposingPartyData {
-  type: 'tenant' | 'other';
-  tenantId?: string;
-  tenantName?: string;
-  propertyAddress?: string;
-  tenantStatus?: string;
-  email?: string;
-  phone?: string;
-  name?: string;
-}
-
-interface OpposingCounselData {
-  name: string;
-  email?: string;
-  phone?: string;
-  firmName?: string;
-  address?: string;
-}
-
-interface CaseDetail {
+interface CaseData {
   id: string;
   court: string;
   jurisdiction: string;
@@ -39,367 +21,296 @@ interface CaseDetail {
   caseType: string;
   status: string;
   visibility: string;
-  plaintiff?: PlaintiffData;
-  opposingParty?: OpposingPartyData;
-  opposingCounsel?: OpposingCounselData;
+  plaintiff?: {
+    type: 'individual' | 'llc';
+    name?: string;
+    llcId?: string;
+    llcName?: string;
+  };
+  opposingParty?: {
+    type: 'tenant' | 'other';
+    tenantId?: string;
+    tenantName?: string;
+    propertyAddress?: string;
+    email?: string;
+    phone?: string;
+    name?: string;
+  };
+  opposingCounsel?: {
+    name: string;
+    email?: string;
+    phone?: string;
+    firmName?: string;
+    address?: string;
+  };
   ourCounsel?: string;
   caseManagers: string[];
   filingDate?: string;
   nextHearingDate?: string;
+  resolution?: CaseResolution;
   description?: string;
   tags: string[];
   createdAt: string;
 }
 
-interface LlcOption {
+interface CourtDate {
   id: string;
-  name: string;
+  type: string;
+  date: string;
+  time?: string;
+  judge?: string;
+  courtroom?: string;
+  description?: string;
+  status: string;
+  outcome?: string;
+  outcomeNotes?: string;
 }
 
-interface TenantOption {
+interface Task {
   id: string;
-  type: 'residential' | 'commercial';
-  firstName?: string;
-  lastName?: string;
-  businessName?: string;
-  email?: string;
-  phone?: string;
-  propertyId?: string;
+  title: string;
+  description?: string;
+  dueDate: string;
+  status: string;
+  priority: string;
+  assignedToUserId?: string;
 }
 
-interface PropertyOption {
+interface Document {
   id: string;
-  address?: string;
-  name?: string;
+  title: string;
+  description?: string;
+  type: string;
+  fileName: string;
+  sizeBytes: number;
+  createdAt: string;
+  storagePath?: string;
 }
+
+const DOCUMENT_TYPES = [
+  { value: 'filing', label: 'Filing' },
+  { value: 'evidence', label: 'Evidence' },
+  { value: 'notice', label: 'Notice' },
+  { value: 'correspondence', label: 'Correspondence' },
+  { value: 'court_order', label: 'Court Order' },
+  { value: 'settlement', label: 'Settlement' },
+  { value: 'other', label: 'Other' },
+];
 
 interface MemberOption {
   userId: string;
   email: string;
   displayName: string | null;
-  role: string;
+}
+
+const CASE_TYPE_LABELS: Record<string, string> = {
+  eviction: 'Eviction',
+  collections: 'Collections',
+  property_damage: 'Property Damage',
+  contract_dispute: 'Contract Dispute',
+  personal_injury: 'Personal Injury',
+  code_violation: 'Code Violation',
+  other: 'Other',
+};
+
+const STATUS_COLORS: Record<string, string> = {
+  open: 'bg-blue-100 text-blue-800',
+  stayed: 'bg-yellow-100 text-yellow-800',
+  settled: 'bg-green-100 text-green-800',
+  judgment: 'bg-purple-100 text-purple-800',
+  closed: 'bg-gray-100 text-gray-800',
+};
+
+const PRIORITY_COLORS: Record<string, string> = {
+  low: 'text-gray-500',
+  medium: 'text-yellow-600',
+  high: 'text-orange-600',
+  urgent: 'text-red-600',
+};
+
+const TASK_STATUS_COLORS: Record<string, string> = {
+  pending: 'bg-gray-100 text-gray-700',
+  in_progress: 'bg-blue-100 text-blue-700',
+  completed: 'bg-green-100 text-green-700',
+  cancelled: 'bg-red-100 text-red-700',
+};
+
+const COURT_DATE_TYPES: Record<string, string> = {
+  hearing: 'Hearing',
+  trial: 'Trial',
+  motion: 'Motion',
+  status_conference: 'Status Conference',
+  pretrial_conference: 'Pretrial Conference',
+  mediation: 'Mediation',
+  settlement_conference: 'Settlement Conference',
+  arraignment: 'Arraignment',
+  sentencing: 'Sentencing',
+  other: 'Other',
+};
+
+const COURT_DATE_STATUS_COLORS: Record<string, string> = {
+  scheduled: 'bg-blue-100 text-blue-700',
+  completed: 'bg-green-100 text-green-700',
+  cancelled: 'bg-gray-100 text-gray-500',
+  continued: 'bg-yellow-100 text-yellow-700',
+  rescheduled: 'bg-orange-100 text-orange-700',
+};
+
+const COURT_DATE_STATUSES: Record<string, string> = {
+  scheduled: 'Scheduled',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+  continued: 'Continued',
+  rescheduled: 'Rescheduled',
+};
+
+const COURT_DATE_OUTCOMES: Record<string, string> = {
+  continued: 'Continued',
+  dismissed: 'Dismissed',
+  dismissed_with_prejudice: 'Dismissed with Prejudice',
+  dismissed_without_prejudice: 'Dismissed without Prejudice',
+  judgment_plaintiff: 'Judgment for Plaintiff',
+  judgment_defendant: 'Judgment for Defendant',
+  default_judgment: 'Default Judgment',
+  settled: 'Settled',
+  stipulation: 'Stipulation',
+  motion_granted: 'Motion Granted',
+  motion_denied: 'Motion Denied',
+  taken_under_advisement: 'Taken Under Advisement',
+  other: 'Other',
+};
+
+const RESOLUTION_TYPES: Record<string, string> = {
+  settlement: 'Settlement',
+  judgment_plaintiff: 'Judgment for Plaintiff',
+  judgment_defendant: 'Judgment for Defendant',
+  default_judgment: 'Default Judgment',
+  dismissal: 'Dismissal',
+  voluntary_dismissal: 'Voluntary Dismissal',
+  other: 'Other',
+};
+
+function formatDate(iso: string | undefined): string {
+  if (!iso) return '—';
+  // Parse as local date to avoid timezone shift
+  const dateStr = iso.substring(0, 10); // Get YYYY-MM-DD portion
+  const parts = dateStr.split('-').map(Number);
+  const year = parts[0];
+  const month = parts[1];
+  const day = parts[2];
+  if (!year || !month || !day) return '—';
+  return new Date(year, month - 1, day).toLocaleDateString();
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function getDaysUntil(dateStr: string): number {
+  const date = new Date(dateStr);
+  const now = new Date();
+  return Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 }
 
 interface CaseDetailPageProps {
   params: Promise<{ llcId: string; caseId: string }>;
 }
 
-const CASE_TYPES = [
-  { value: 'eviction', label: 'Eviction' },
-  { value: 'collections', label: 'Collections' },
-  { value: 'property_damage', label: 'Property Damage' },
-  { value: 'contract_dispute', label: 'Contract Dispute' },
-  { value: 'personal_injury', label: 'Personal Injury' },
-  { value: 'code_violation', label: 'Code Violation' },
-  { value: 'other', label: 'Other' },
-];
-
-const STATUSES = [
-  { value: 'open', label: 'Open' },
-  { value: 'stayed', label: 'Stayed' },
-  { value: 'settled', label: 'Settled' },
-  { value: 'judgment', label: 'Judgment' },
-  { value: 'closed', label: 'Closed' },
-];
-
-const VISIBILITIES = [
-  { value: 'llcWide', label: 'LLC-Wide' },
-  { value: 'restricted', label: 'Restricted' },
-];
-
-function toDateInput(iso: string | undefined): string {
-  if (!iso) return '';
-  return iso.substring(0, 10);
-}
-
-function getTenantDisplayName(t: TenantOption): string {
-  if (t.type === 'commercial') return t.businessName || 'Unknown Business';
-  return `${t.firstName || ''} ${t.lastName || ''}`.trim() || 'Unknown';
-}
-
 export default function CaseDetailPage({ params }: CaseDetailPageProps) {
   const { llcId, caseId } = use(params);
   const router = useRouter();
 
-  const [caseData, setCaseData] = useState<CaseDetail | null>(null);
+  const [caseData, setCaseData] = useState<CaseData | null>(null);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [courtDates, setCourtDates] = useState<CourtDate[]>([]);
+  const [members, setMembers] = useState<MemberOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [submitting, setSubmitting] = useState(false);
 
-  // Data for dropdowns
-  const [llcs, setLlcs] = useState<LlcOption[]>([]);
-  const [tenants, setTenants] = useState<TenantOption[]>([]);
-  const [properties, setProperties] = useState<PropertyOption[]>([]);
-  const [members, setMembers] = useState<MemberOption[]>([]);
+  // Court date form state
+  const [showCourtDateForm, setShowCourtDateForm] = useState(false);
+  const [editingCourtDateId, setEditingCourtDateId] = useState<string | null>(null);
+  const [courtDateType, setCourtDateType] = useState('hearing');
+  const [courtDateDate, setCourtDateDate] = useState('');
+  const [courtDateTime, setCourtDateTime] = useState('');
+  const [courtDateJudge, setCourtDateJudge] = useState('');
+  const [courtDateCourtroom, setCourtDateCourtroom] = useState('');
+  const [courtDateDescription, setCourtDateDescription] = useState('');
+  const [courtDateStatus, setCourtDateStatus] = useState('scheduled');
+  const [courtDateOutcome, setCourtDateOutcome] = useState('');
+  const [courtDateOutcomeNotes, setCourtDateOutcomeNotes] = useState('');
+  const [savingCourtDate, setSavingCourtDate] = useState(false);
 
-  // Court Info
-  const [court, setCourt] = useState('');
-  const [jurisdiction, setJurisdiction] = useState('');
-  const [docketNumber, setDocketNumber] = useState('');
-  const [caseType, setCaseType] = useState('');
-  const [status, setStatus] = useState('');
+  // Document upload state
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadType, setUploadType] = useState('other');
+  const [uploadTitle, setUploadTitle] = useState('');
+  const [uploadDescription, setUploadDescription] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const [showUploadForm, setShowUploadForm] = useState(false);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
-  // Plaintiff
-  const [plaintiffType, setPlaintiffType] = useState<'individual' | 'llc'>('individual');
-  const [plaintiffName, setPlaintiffName] = useState('');
-  const [plaintiffLlcId, setPlaintiffLlcId] = useState('');
+  // Ref for court dates section
+  const courtDatesSectionRef = useRef<HTMLDivElement>(null);
 
-  // Opposing Party
-  const [opposingPartyType, setOpposingPartyType] = useState<'tenant' | 'other'>('other');
-  const [opposingPartyTenantId, setOpposingPartyTenantId] = useState('');
-  const [opposingPartyName, setOpposingPartyName] = useState('');
-  const [tenantSearch, setTenantSearch] = useState('');
+  const handleQuickAddCourtDate = () => {
+    // Reset to ensure we're in "add" mode, not "edit" mode
+    setEditingCourtDateId(null);
+    setCourtDateType('hearing');
+    setCourtDateDate('');
+    setCourtDateTime('');
+    setCourtDateJudge('');
+    setCourtDateCourtroom('');
+    setCourtDateDescription('');
+    setCourtDateStatus('scheduled');
+    setCourtDateOutcome('');
+    setCourtDateOutcomeNotes('');
+    setShowCourtDateForm(true);
+    // Scroll to the court dates section after a brief delay to allow the form to render
+    setTimeout(() => {
+      courtDatesSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+  };
 
-  // Opposing Counsel
-  const [ocName, setOcName] = useState('');
-  const [ocEmail, setOcEmail] = useState('');
-  const [ocPhone, setOcPhone] = useState('');
-  const [ocFirmName, setOcFirmName] = useState('');
-  const [ocAddress, setOcAddress] = useState('');
-
-  // Case Management
-  const [ourCounsel, setOurCounsel] = useState('');
-  const [caseManagers, setCaseManagers] = useState<string[]>([]);
-  const [visibility, setVisibility] = useState('');
-
-  // Dates & Details
-  const [filingDate, setFilingDate] = useState('');
-  const [nextHearingDate, setNextHearingDate] = useState('');
-  const [description, setDescription] = useState('');
-  const [tags, setTags] = useState('');
-
-  const populateForm = useCallback((c: CaseDetail) => {
-    setCourt(c.court);
-    setJurisdiction(c.jurisdiction);
-    setDocketNumber(c.docketNumber || '');
-    setCaseType(c.caseType);
-    setStatus(c.status);
-    setVisibility(c.visibility);
-
-    // Plaintiff
-    if (c.plaintiff) {
-      setPlaintiffType(c.plaintiff.type);
-      if (c.plaintiff.type === 'individual') {
-        setPlaintiffName(c.plaintiff.name || '');
-      } else {
-        setPlaintiffLlcId(c.plaintiff.llcId || '');
-      }
-    }
-
-    // Opposing Party
-    if (c.opposingParty) {
-      setOpposingPartyType(c.opposingParty.type);
-      if (c.opposingParty.type === 'tenant') {
-        setOpposingPartyTenantId(c.opposingParty.tenantId || '');
-      } else {
-        setOpposingPartyName(c.opposingParty.name || '');
-      }
-    }
-
-    // Opposing Counsel
-    if (c.opposingCounsel) {
-      setOcName(c.opposingCounsel.name || '');
-      setOcEmail(c.opposingCounsel.email || '');
-      setOcPhone(c.opposingCounsel.phone || '');
-      setOcFirmName(c.opposingCounsel.firmName || '');
-      setOcAddress(c.opposingCounsel.address || '');
-    }
-
-    setOurCounsel(c.ourCounsel || '');
-    setCaseManagers(c.caseManagers || []);
-    setFilingDate(toDateInput(c.filingDate));
-    setNextHearingDate(toDateInput(c.nextHearingDate));
-    setDescription(c.description || '');
-    setTags(c.tags.join(', '));
-  }, []);
-
-  const fetchCase = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     try {
-      const res = await fetch(`/api/llcs/${llcId}/cases/${caseId}`);
-      const data = await res.json();
+      const [caseRes, tasksRes, docsRes, courtDatesRes, membersRes] = await Promise.all([
+        fetch(`/api/llcs/${llcId}/cases/${caseId}`),
+        fetch(`/api/llcs/${llcId}/cases/${caseId}/tasks`),
+        fetch(`/api/llcs/${llcId}/cases/${caseId}/documents`),
+        fetch(`/api/llcs/${llcId}/cases/${caseId}/court-dates`),
+        fetch(`/api/llcs/${llcId}/members`),
+      ]);
 
-      if (data.ok) {
-        const c: CaseDetail = data.data;
-        setCaseData(c);
-        populateForm(c);
-      } else {
-        setError(data.error?.message || 'Failed to load case');
-      }
+      const [caseJson, tasksJson, docsJson, courtDatesJson, membersJson] = await Promise.all([
+        caseRes.json(),
+        tasksRes.json(),
+        docsRes.json(),
+        courtDatesRes.json(),
+        membersRes.json(),
+      ]);
+
+      if (caseJson.ok) setCaseData(caseJson.data);
+      else setError(caseJson.error?.message || 'Failed to load case');
+
+      if (tasksJson.ok) setTasks(tasksJson.data);
+      if (docsJson.ok) setDocuments(docsJson.data);
+      if (courtDatesJson.ok) setCourtDates(courtDatesJson.data);
+      if (membersJson.ok) setMembers(membersJson.data);
     } catch {
-      setError('Failed to load case');
+      setError('Failed to load case data');
     } finally {
       setLoading(false);
     }
-  }, [llcId, caseId, populateForm]);
+  }, [llcId, caseId]);
 
   useEffect(() => {
-    fetchCase();
-  }, [fetchCase]);
-
-  useEffect(() => {
-    // Fetch dropdown data
-    Promise.all([
-      fetch('/api/llcs').then((r) => r.json()),
-      fetch(`/api/llcs/${llcId}/tenants`).then((r) => r.json()),
-      fetch(`/api/llcs/${llcId}/properties`).then((r) => r.json()),
-      fetch(`/api/llcs/${llcId}/members`).then((r) => r.json()),
-    ]).then(([llcRes, tenantRes, propRes, memberRes]) => {
-      if (llcRes.ok) setLlcs(llcRes.data);
-      if (tenantRes.ok) setTenants(tenantRes.data);
-      if (propRes.ok) setProperties(propRes.data);
-      if (memberRes.ok) setMembers(memberRes.data);
-    });
-  }, [llcId]);
-
-  const selectedTenant = tenants.find((t) => t.id === opposingPartyTenantId);
-
-  const getPropertyAddress = (propertyId: string | undefined): string => {
-    if (!propertyId) return '';
-    const prop = properties.find((p) => p.id === propertyId);
-    return prop?.address || prop?.name || '';
-  };
-
-  const filteredTenants = tenants.filter((t) => {
-    if (!tenantSearch) return true;
-    const name = getTenantDisplayName(t).toLowerCase();
-    return name.includes(tenantSearch.toLowerCase());
-  });
-
-  const handleCaseManagerToggle = (userId: string) => {
-    setCaseManagers((prev) =>
-      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
-    );
-  };
-
-  const buildCurrentPlaintiff = (): PlaintiffData | undefined => {
-    if (plaintiffType === 'individual' && plaintiffName) {
-      return { type: 'individual', name: plaintiffName };
-    } else if (plaintiffType === 'llc' && plaintiffLlcId) {
-      const selectedLlc = llcs.find((l) => l.id === plaintiffLlcId);
-      if (selectedLlc) {
-        return { type: 'llc', llcId: selectedLlc.id, llcName: selectedLlc.name };
-      }
-    }
-    return undefined;
-  };
-
-  const buildCurrentOpposingParty = (): OpposingPartyData | undefined => {
-    if (opposingPartyType === 'tenant' && opposingPartyTenantId) {
-      const tenant = selectedTenant || tenants.find((t) => t.id === opposingPartyTenantId);
-      if (tenant) {
-        const tenantName = getTenantDisplayName(tenant);
-        const propertyAddress = getPropertyAddress(tenant.propertyId);
-        return {
-          type: 'tenant',
-          tenantId: tenant.id,
-          tenantName,
-          ...(propertyAddress && { propertyAddress }),
-          ...(tenant.email && { email: tenant.email }),
-          ...(tenant.phone && { phone: tenant.phone }),
-        };
-      }
-    } else if (opposingPartyType === 'other' && opposingPartyName) {
-      return { type: 'other', name: opposingPartyName };
-    }
-    return undefined;
-  };
-
-  const buildCurrentOpposingCounsel = (): OpposingCounselData | undefined => {
-    if (!ocName) return undefined;
-    return {
-      name: ocName,
-      ...(ocEmail && { email: ocEmail }),
-      ...(ocPhone && { phone: ocPhone }),
-      ...(ocFirmName && { firmName: ocFirmName }),
-      ...(ocAddress && { address: ocAddress }),
-    };
-  };
-
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setSubmitting(true);
-    setError('');
-    setSuccess('');
-
-    try {
-      const body: Record<string, unknown> = {};
-
-      // Simple field diffs
-      if (court !== caseData?.court) body.court = court;
-      if (jurisdiction !== caseData?.jurisdiction) body.jurisdiction = jurisdiction;
-      if (docketNumber !== (caseData?.docketNumber || '')) body.docketNumber = docketNumber;
-      if (caseType !== caseData?.caseType) body.caseType = caseType;
-      if (status !== caseData?.status) body.status = status;
-      if (visibility !== caseData?.visibility) body.visibility = visibility;
-      if (ourCounsel !== (caseData?.ourCounsel || '')) body.ourCounsel = ourCounsel;
-      if (description !== (caseData?.description || '')) body.description = description;
-
-      // Date diffs
-      if (filingDate !== toDateInput(caseData?.filingDate)) {
-        body.filingDate = filingDate ? new Date(filingDate).toISOString() : '';
-      }
-      if (nextHearingDate !== toDateInput(caseData?.nextHearingDate)) {
-        body.nextHearingDate = nextHearingDate ? new Date(nextHearingDate).toISOString() : '';
-      }
-
-      // Tags diff
-      const tagList = tags.split(',').map((t) => t.trim()).filter(Boolean);
-      if (JSON.stringify(tagList) !== JSON.stringify(caseData?.tags)) {
-        body.tags = tagList;
-      }
-
-      // Plaintiff diff
-      const currentPlaintiff = buildCurrentPlaintiff();
-      if (JSON.stringify(currentPlaintiff) !== JSON.stringify(caseData?.plaintiff)) {
-        body.plaintiff = currentPlaintiff || null;
-      }
-
-      // Opposing Party diff
-      const currentOpposingParty = buildCurrentOpposingParty();
-      if (JSON.stringify(currentOpposingParty) !== JSON.stringify(caseData?.opposingParty)) {
-        body.opposingParty = currentOpposingParty || null;
-      }
-
-      // Opposing Counsel diff
-      const currentOpposingCounsel = buildCurrentOpposingCounsel();
-      if (JSON.stringify(currentOpposingCounsel) !== JSON.stringify(caseData?.opposingCounsel)) {
-        body.opposingCounsel = currentOpposingCounsel || null;
-      }
-
-      // Case Managers diff
-      const sortedCurrent = [...caseManagers].sort();
-      const sortedOriginal = [...(caseData?.caseManagers || [])].sort();
-      if (JSON.stringify(sortedCurrent) !== JSON.stringify(sortedOriginal)) {
-        body.caseManagers = caseManagers;
-      }
-
-      if (Object.keys(body).length === 0) {
-        setSuccess('No changes to save.');
-        setSubmitting(false);
-        return;
-      }
-
-      const res = await fetch(`/api/llcs/${llcId}/cases/${caseId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-
-      const data = await res.json();
-
-      if (data.ok) {
-        setSuccess('Case updated successfully.');
-        setCaseData(data.data);
-      } else {
-        setError(data.error?.message || 'Failed to update case');
-      }
-    } catch {
-      setError('Failed to update case');
-    } finally {
-      setSubmitting(false);
-    }
-  };
+    fetchData();
+  }, [fetchData]);
 
   const handleDelete = async () => {
     if (!confirm('Are you sure you want to delete this case? This cannot be undone.')) return;
@@ -411,338 +322,1004 @@ export default function CaseDetailPage({ params }: CaseDetailPageProps) {
       if (data.ok) {
         router.push(`/llcs/${llcId}/legal`);
       } else {
-        setError(data.error?.message || 'Failed to delete case');
+        alert(data.error?.message || 'Failed to delete case');
       }
     } catch {
-      setError('Failed to delete case');
+      alert('Failed to delete case');
     }
   };
 
+  const getMemberName = (userId: string): string => {
+    const member = members.find(m => m.userId === userId);
+    return member?.displayName || member?.email || userId;
+  };
+
+  // Document handlers
+  const handleUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!uploadFile) return;
+
+    setUploading(true);
+    setUploadError('');
+
+    try {
+      // 1. Get upload URL
+      const urlRes = await fetch(`/api/llcs/${llcId}/cases/${caseId}/documents/upload-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: uploadFile.name,
+          contentType: uploadFile.type,
+          sizeBytes: uploadFile.size,
+        }),
+      });
+
+      const urlData = await urlRes.json();
+      if (!urlData.ok) {
+        throw new Error(urlData.error?.message || 'Failed to get upload URL');
+      }
+
+      // 2. Upload to Storage
+      const uploadRes = await fetch(urlData.data.uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': uploadFile.type },
+        body: uploadFile,
+      });
+
+      if (!uploadRes.ok) {
+        throw new Error('Failed to upload file');
+      }
+
+      // 3. Create document record
+      const docRes = await fetch(`/api/llcs/${llcId}/cases/${caseId}/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: uploadType,
+          title: uploadTitle || uploadFile.name,
+          description: uploadDescription.trim() || undefined,
+          fileName: uploadFile.name,
+          storagePath: urlData.data.storagePath,
+          contentType: uploadFile.type,
+          sizeBytes: uploadFile.size,
+        }),
+      });
+
+      const docData = await docRes.json();
+      if (!docData.ok) {
+        throw new Error(docData.error?.message || 'Failed to create document record');
+      }
+
+      // Reset form and refresh
+      setUploadFile(null);
+      setUploadType('other');
+      setUploadTitle('');
+      setUploadDescription('');
+      setShowUploadForm(false);
+      fetchData();
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDownload = async (documentId: string) => {
+    setDownloadingId(documentId);
+    try {
+      const res = await fetch(`/api/llcs/${llcId}/cases/${caseId}/documents/${documentId}`);
+      const data = await res.json();
+
+      if (data.ok && data.data.downloadUrl) {
+        window.open(data.data.downloadUrl, '_blank');
+      } else {
+        alert(data.error?.message || 'Failed to get download URL');
+      }
+    } catch {
+      alert('Failed to download document');
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
+  const handleDeleteDocument = async (documentId: string) => {
+    if (!confirm('Are you sure you want to delete this document?')) return;
+
+    try {
+      const res = await fetch(`/api/llcs/${llcId}/cases/${caseId}/documents/${documentId}`, {
+        method: 'DELETE',
+      });
+
+      const data = await res.json();
+      if (data.ok) {
+        fetchData();
+      } else {
+        alert(data.error?.message || 'Failed to delete document');
+      }
+    } catch {
+      alert('Failed to delete document');
+    }
+  };
+
+  // Court date handlers
+  const resetCourtDateForm = () => {
+    setCourtDateType('hearing');
+    setCourtDateDate('');
+    setCourtDateTime('');
+    setCourtDateJudge('');
+    setCourtDateCourtroom('');
+    setCourtDateDescription('');
+    setCourtDateStatus('scheduled');
+    setCourtDateOutcome('');
+    setCourtDateOutcomeNotes('');
+    setEditingCourtDateId(null);
+    setShowCourtDateForm(false);
+  };
+
+  const handleEditCourtDate = (cd: CourtDate) => {
+    setEditingCourtDateId(cd.id);
+    setCourtDateType(cd.type);
+    setCourtDateDate(cd.date);
+    setCourtDateTime(cd.time || '');
+    setCourtDateJudge(cd.judge || '');
+    setCourtDateCourtroom(cd.courtroom || '');
+    setCourtDateDescription(cd.description || '');
+    setCourtDateStatus(cd.status);
+    setCourtDateOutcome(cd.outcome || '');
+    setCourtDateOutcomeNotes(cd.outcomeNotes || '');
+    setShowCourtDateForm(true);
+    // Scroll to form
+    setTimeout(() => {
+      courtDatesSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+  };
+
+  const handleSaveCourtDate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!courtDateDate) return;
+
+    setSavingCourtDate(true);
+    try {
+      const isEditing = !!editingCourtDateId;
+      const url = isEditing
+        ? `/api/llcs/${llcId}/cases/${caseId}/court-dates/${editingCourtDateId}`
+        : `/api/llcs/${llcId}/cases/${caseId}/court-dates`;
+
+      const res = await fetch(url, {
+        method: isEditing ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: courtDateType,
+          date: courtDateDate,
+          time: courtDateTime || undefined,
+          judge: courtDateJudge || undefined,
+          courtroom: courtDateCourtroom || undefined,
+          description: courtDateDescription || undefined,
+          status: courtDateStatus,
+          outcome: courtDateOutcome || undefined,
+          outcomeNotes: courtDateOutcomeNotes || undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.ok) {
+        resetCourtDateForm();
+        fetchData();
+      } else {
+        alert(data.error?.message || `Failed to ${isEditing ? 'update' : 'add'} court date`);
+      }
+    } catch {
+      alert(`Failed to ${editingCourtDateId ? 'update' : 'add'} court date`);
+    } finally {
+      setSavingCourtDate(false);
+    }
+  };
+
+  const handleDeleteCourtDate = async (courtDateId: string) => {
+    if (!confirm('Are you sure you want to delete this court date?')) return;
+
+    try {
+      const res = await fetch(`/api/llcs/${llcId}/cases/${caseId}/court-dates/${courtDateId}`, {
+        method: 'DELETE',
+      });
+
+      const data = await res.json();
+      if (data.ok) {
+        fetchData();
+      } else {
+        alert(data.error?.message || 'Failed to delete court date');
+      }
+    } catch {
+      alert('Failed to delete court date');
+    }
+  };
+
+  const handleMarkCourtDateComplete = async (courtDateId: string) => {
+    try {
+      const res = await fetch(`/api/llcs/${llcId}/cases/${caseId}/court-dates/${courtDateId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'completed' }),
+      });
+
+      const data = await res.json();
+      if (data.ok) {
+        fetchData();
+      } else {
+        alert(data.error?.message || 'Failed to update court date');
+      }
+    } catch {
+      alert('Failed to update court date');
+    }
+  };
+
+  // Separate upcoming and past court dates
+  const today = new Date().toISOString().split('T')[0] || '';
+  const upcomingCourtDates = courtDates.filter(cd => cd.date >= today && cd.status === 'scheduled');
+  const pastCourtDates = courtDates.filter(cd => cd.date < today || cd.status !== 'scheduled');
+
   if (loading) {
-    return <div className="text-muted-foreground">Loading case...</div>;
+    return (
+      <div className="animate-pulse space-y-6">
+        <div className="h-8 bg-secondary rounded w-1/3"></div>
+        <div className="h-32 bg-secondary rounded"></div>
+        <div className="h-48 bg-secondary rounded"></div>
+      </div>
+    );
   }
 
-  if (!caseData) {
-    return <div className="text-destructive">{error || 'Case not found'}</div>;
+  if (error || !caseData) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-destructive mb-4">{error || 'Case not found'}</p>
+        <Link href={`/llcs/${llcId}/legal`} className="text-primary hover:underline">
+          Back to Cases
+        </Link>
+      </div>
+    );
   }
+
+  const pendingTasks = tasks.filter(t => t.status === 'pending' || t.status === 'in_progress');
+  const completedTasks = tasks.filter(t => t.status === 'completed');
 
   return (
-    <div className="max-w-2xl">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold">Case Details</h1>
-        <div className="flex gap-2">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <h1 className="text-2xl font-bold">
+              {caseData.docketNumber || `${CASE_TYPE_LABELS[caseData.caseType] || caseData.caseType} Case`}
+            </h1>
+            <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${STATUS_COLORS[caseData.status] || 'bg-gray-100'}`}>
+              {caseData.status}
+            </span>
+          </div>
+          <p className="text-muted-foreground">
+            {caseData.court} &bull; {caseData.jurisdiction}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
           <Link
-            href={`/llcs/${llcId}/legal/${caseId}/tasks`}
-            className="px-3 py-1.5 border rounded-md text-sm hover:bg-secondary transition-colors"
+            href={`/llcs/${llcId}/legal/${caseId}/edit`}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity text-sm"
           >
-            Tasks
+            Edit Case
           </Link>
-          <Link
-            href={`/llcs/${llcId}/legal/${caseId}/documents`}
-            className="px-3 py-1.5 border rounded-md text-sm hover:bg-secondary transition-colors"
+          <button
+            onClick={handleDelete}
+            className="px-4 py-2 text-sm text-destructive hover:bg-destructive/10 rounded-md transition-colors"
           >
-            Documents
-          </Link>
+            Delete
+          </button>
         </div>
       </div>
 
-      {error && (
-        <div className="mb-4 p-3 bg-destructive/10 text-destructive rounded-md text-sm">{error}</div>
-      )}
-      {success && (
-        <div className="mb-4 p-3 bg-green-50 text-green-800 rounded-md text-sm">{success}</div>
-      )}
-
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Court Information */}
-        <fieldset className="space-y-4">
-          <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-            Court Information
-          </legend>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="court" className="block text-sm font-medium mb-1">Court</label>
-              <input id="court" required value={court} onChange={(e) => setCourt(e.target.value)}
-                className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
-            </div>
-            <div>
-              <label htmlFor="jurisdiction" className="block text-sm font-medium mb-1">Jurisdiction</label>
-              <input id="jurisdiction" required value={jurisdiction} onChange={(e) => setJurisdiction(e.target.value)}
-                className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label htmlFor="docketNumber" className="block text-sm font-medium mb-1">Docket #</label>
-              <input id="docketNumber" value={docketNumber} onChange={(e) => setDocketNumber(e.target.value)}
-                className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
-            </div>
-            <div>
-              <label htmlFor="caseType" className="block text-sm font-medium mb-1">Type</label>
-              <select id="caseType" value={caseType} onChange={(e) => setCaseType(e.target.value)}
-                className="w-full px-3 py-2 border rounded-md bg-background text-sm">
-                {CASE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="status" className="block text-sm font-medium mb-1">Status</label>
-              <select id="status" value={status} onChange={(e) => setStatus(e.target.value)}
-                className="w-full px-3 py-2 border rounded-md bg-background text-sm">
-                {STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-              </select>
-            </div>
-          </div>
-        </fieldset>
-
-        {/* Plaintiff */}
-        <fieldset className="space-y-4">
-          <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-            Plaintiff
-          </legend>
-
-          <div className="flex gap-4 mb-3">
-            <label className="flex items-center gap-2 text-sm">
-              <input type="radio" name="plaintiffType" value="individual"
-                checked={plaintiffType === 'individual'}
-                onChange={() => setPlaintiffType('individual')} />
-              Individual
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="radio" name="plaintiffType" value="llc"
-                checked={plaintiffType === 'llc'}
-                onChange={() => setPlaintiffType('llc')} />
-              Business/LLC
-            </label>
-          </div>
-
-          {plaintiffType === 'individual' ? (
-            <div>
-              <label htmlFor="plaintiffName" className="block text-sm font-medium mb-1">Name</label>
-              <input id="plaintiffName" value={plaintiffName} onChange={(e) => setPlaintiffName(e.target.value)}
-                placeholder="Plaintiff name"
-                className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
-            </div>
-          ) : (
-            <div>
-              <label htmlFor="plaintiffLlc" className="block text-sm font-medium mb-1">Select LLC</label>
-              <select id="plaintiffLlc" value={plaintiffLlcId} onChange={(e) => setPlaintiffLlcId(e.target.value)}
-                className="w-full px-3 py-2 border rounded-md bg-background text-sm">
-                <option value="">-- Select an LLC --</option>
-                {llcs.map((l) => (
-                  <option key={l.id} value={l.id}>{l.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
-        </fieldset>
-
-        {/* Opposing Party */}
-        <fieldset className="space-y-4">
-          <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-            Opposing Party
-          </legend>
-
-          <div className="flex gap-4 mb-3">
-            <label className="flex items-center gap-2 text-sm">
-              <input type="radio" name="opposingPartyType" value="tenant"
-                checked={opposingPartyType === 'tenant'}
-                onChange={() => setOpposingPartyType('tenant')} />
-              Tenant
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="radio" name="opposingPartyType" value="other"
-                checked={opposingPartyType === 'other'}
-                onChange={() => setOpposingPartyType('other')} />
-              Other
-            </label>
-          </div>
-
-          {opposingPartyType === 'tenant' ? (
-            <div className="space-y-3">
-              <div>
-                <label htmlFor="tenantSearch" className="block text-sm font-medium mb-1">Search Tenant</label>
-                <input id="tenantSearch" value={tenantSearch} onChange={(e) => setTenantSearch(e.target.value)}
-                  placeholder="Type to filter tenants..."
-                  className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
-              </div>
-              <div>
-                <select value={opposingPartyTenantId} onChange={(e) => setOpposingPartyTenantId(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md bg-background text-sm">
-                  <option value="">-- Select a tenant --</option>
-                  {filteredTenants.map((t) => (
-                    <option key={t.id} value={t.id}>{getTenantDisplayName(t)}</option>
-                  ))}
-                </select>
-              </div>
-
-              {(selectedTenant || (opposingPartyTenantId && caseData?.opposingParty?.type === 'tenant')) && (
-                <div className="p-3 bg-secondary/50 rounded-md text-sm space-y-1">
-                  {selectedTenant ? (
-                    <>
-                      <p className="font-medium">{getTenantDisplayName(selectedTenant)}</p>
-                      {selectedTenant.propertyId && (
-                        <p className="text-muted-foreground">Property: {getPropertyAddress(selectedTenant.propertyId) || selectedTenant.propertyId}</p>
-                      )}
-                      {selectedTenant.email && <p className="text-muted-foreground">Email: {selectedTenant.email}</p>}
-                      {selectedTenant.phone && <p className="text-muted-foreground">Phone: {selectedTenant.phone}</p>}
-                    </>
-                  ) : (
-                    <>
-                      <p className="font-medium">{caseData?.opposingParty?.tenantName}</p>
-                      {caseData?.opposingParty?.propertyAddress && (
-                        <p className="text-muted-foreground">Property: {caseData.opposingParty.propertyAddress}</p>
-                      )}
-                      {caseData?.opposingParty?.email && <p className="text-muted-foreground">Email: {caseData.opposingParty.email}</p>}
-                      {caseData?.opposingParty?.phone && <p className="text-muted-foreground">Phone: {caseData.opposingParty.phone}</p>}
-                    </>
-                  )}
+      {/* Main Content Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Column - Case Details */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Key Dates Alert */}
+          {caseData.nextHearingDate && (
+            <div className={`p-4 rounded-lg border ${getDaysUntil(caseData.nextHearingDate) <= 7 ? 'bg-red-50 border-red-200' : 'bg-yellow-50 border-yellow-200'}`}>
+              <div className="flex items-center gap-3">
+                <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <div>
+                  <p className="font-medium">Next Hearing: {formatDate(caseData.nextHearingDate)}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {getDaysUntil(caseData.nextHearingDate)} days from now
+                  </p>
                 </div>
-              )}
-            </div>
-          ) : (
-            <div>
-              <label htmlFor="opposingPartyName" className="block text-sm font-medium mb-1">Name</label>
-              <input id="opposingPartyName" value={opposingPartyName} onChange={(e) => setOpposingPartyName(e.target.value)}
-                placeholder="Opposing party name"
-                className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
+              </div>
             </div>
           )}
-        </fieldset>
 
-        {/* Opposing Counsel */}
-        <fieldset className="space-y-4">
-          <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-            Opposing Counsel
-          </legend>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="ocName" className="block text-sm font-medium mb-1">Name</label>
-              <input id="ocName" value={ocName} onChange={(e) => setOcName(e.target.value)}
-                className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
-            </div>
-            <div>
-              <label htmlFor="ocEmail" className="block text-sm font-medium mb-1">Email</label>
-              <input id="ocEmail" type="email" value={ocEmail} onChange={(e) => setOcEmail(e.target.value)}
-                className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="ocPhone" className="block text-sm font-medium mb-1">Phone</label>
-              <input id="ocPhone" value={ocPhone} onChange={(e) => setOcPhone(e.target.value)}
-                className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
-            </div>
-            <div>
-              <label htmlFor="ocFirmName" className="block text-sm font-medium mb-1">Firm Name</label>
-              <input id="ocFirmName" value={ocFirmName} onChange={(e) => setOcFirmName(e.target.value)}
-                className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
-            </div>
-          </div>
-
-          <div>
-            <label htmlFor="ocAddress" className="block text-sm font-medium mb-1">Address</label>
-            <input id="ocAddress" value={ocAddress} onChange={(e) => setOcAddress(e.target.value)}
-              className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
-          </div>
-        </fieldset>
-
-        {/* Case Management */}
-        <fieldset className="space-y-4">
-          <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-            Case Management
-          </legend>
-
-          <div>
-            <label htmlFor="ourCounsel" className="block text-sm font-medium mb-1">Our Counsel</label>
-            <input id="ourCounsel" value={ourCounsel} onChange={(e) => setOurCounsel(e.target.value)}
-              className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">Case Managers</label>
-            {members.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No members available</p>
-            ) : (
-              <div className="space-y-2 max-h-40 overflow-y-auto border rounded-md p-3">
-                {members.map((m) => (
-                  <label key={m.userId} className="flex items-center gap-2 text-sm">
-                    <input type="checkbox"
-                      checked={caseManagers.includes(m.userId)}
-                      onChange={() => handleCaseManagerToggle(m.userId)} />
-                    <span>{m.displayName || m.email}</span>
-                    <span className="text-muted-foreground text-xs">({m.role})</span>
-                  </label>
+          {/* Case Information */}
+          <div className="border rounded-lg p-5">
+            <h2 className="font-semibold mb-4">Case Information</h2>
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
+              <div>
+                <dt className="text-muted-foreground">Case Type</dt>
+                <dd className="font-medium">{CASE_TYPE_LABELS[caseData.caseType] || caseData.caseType}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Docket Number</dt>
+                <dd className="font-medium">{caseData.docketNumber || '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Filing Date</dt>
+                <dd className="font-medium">{formatDate(caseData.filingDate)}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Visibility</dt>
+                <dd className="font-medium capitalize">{caseData.visibility === 'llcWide' ? 'LLC-Wide' : 'Restricted'}</dd>
+              </div>
+            </dl>
+            {caseData.description && (
+              <div className="mt-4 pt-4 border-t">
+                <dt className="text-muted-foreground text-sm mb-1">Description</dt>
+                <dd className="text-sm whitespace-pre-wrap">{caseData.description}</dd>
+              </div>
+            )}
+            {caseData.tags && caseData.tags.length > 0 && (
+              <div className="mt-4 pt-4 border-t flex flex-wrap gap-2">
+                {caseData.tags.map(tag => (
+                  <span key={tag} className="px-2 py-0.5 bg-secondary rounded text-xs">{tag}</span>
                 ))}
               </div>
             )}
           </div>
 
-          <div>
-            <label htmlFor="visibility" className="block text-sm font-medium mb-1">Visibility</label>
-            <select id="visibility" value={visibility} onChange={(e) => setVisibility(e.target.value)}
-              className="w-full px-3 py-2 border rounded-md bg-background text-sm">
-              {VISIBILITIES.map((v) => (
-                <option key={v.value} value={v.value}>{v.label}</option>
-              ))}
-            </select>
-          </div>
-        </fieldset>
+          {/* Parties */}
+          <div className="border rounded-lg p-5">
+            <h2 className="font-semibold mb-4">Parties</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Plaintiff */}
+              <div>
+                <h3 className="text-sm text-muted-foreground mb-2">Plaintiff</h3>
+                {caseData.plaintiff ? (
+                  <div className="p-3 bg-secondary/30 rounded-md">
+                    <p className="font-medium">
+                      {caseData.plaintiff.type === 'llc' ? caseData.plaintiff.llcName : caseData.plaintiff.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground capitalize">{caseData.plaintiff.type}</p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Not specified</p>
+                )}
+              </div>
 
-        {/* Dates & Details */}
-        <fieldset className="space-y-4">
-          <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-            Dates & Details
-          </legend>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="filingDate" className="block text-sm font-medium mb-1">Filing Date</label>
-              <input id="filingDate" type="date" value={filingDate} onChange={(e) => setFilingDate(e.target.value)}
-                className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
+              {/* Opposing Party */}
+              <div>
+                <h3 className="text-sm text-muted-foreground mb-2">Opposing Party</h3>
+                {caseData.opposingParty ? (
+                  <div className="p-3 bg-secondary/30 rounded-md">
+                    <p className="font-medium">
+                      {caseData.opposingParty.type === 'tenant' ? caseData.opposingParty.tenantName : caseData.opposingParty.name}
+                    </p>
+                    {caseData.opposingParty.propertyAddress && (
+                      <p className="text-xs text-muted-foreground">{caseData.opposingParty.propertyAddress}</p>
+                    )}
+                    {caseData.opposingParty.email && (
+                      <p className="text-xs text-muted-foreground">{caseData.opposingParty.email}</p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Not specified</p>
+                )}
+              </div>
             </div>
-            <div>
-              <label htmlFor="nextHearingDate" className="block text-sm font-medium mb-1">Next Hearing</label>
-              <input id="nextHearingDate" type="date" value={nextHearingDate} onChange={(e) => setNextHearingDate(e.target.value)}
-                className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
+          </div>
+
+          {/* Counsel */}
+          <div className="border rounded-lg p-5">
+            <h2 className="font-semibold mb-4">Counsel</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Our Counsel */}
+              <div>
+                <h3 className="text-sm text-muted-foreground mb-2">Our Counsel</h3>
+                {caseData.ourCounsel ? (
+                  <p className="font-medium">{caseData.ourCounsel}</p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Not specified</p>
+                )}
+              </div>
+
+              {/* Opposing Counsel */}
+              <div>
+                <h3 className="text-sm text-muted-foreground mb-2">Opposing Counsel</h3>
+                {caseData.opposingCounsel ? (
+                  <div className="space-y-1">
+                    <p className="font-medium">{caseData.opposingCounsel.name}</p>
+                    {caseData.opposingCounsel.firmName && (
+                      <p className="text-sm text-muted-foreground">{caseData.opposingCounsel.firmName}</p>
+                    )}
+                    {caseData.opposingCounsel.email && (
+                      <p className="text-sm text-muted-foreground">{caseData.opposingCounsel.email}</p>
+                    )}
+                    {caseData.opposingCounsel.phone && (
+                      <p className="text-sm text-muted-foreground">{caseData.opposingCounsel.phone}</p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Not specified</p>
+                )}
+              </div>
             </div>
           </div>
 
-          <div>
-            <label htmlFor="description" className="block text-sm font-medium mb-1">Description</label>
-            <textarea id="description" rows={3} value={description} onChange={(e) => setDescription(e.target.value)}
-              className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
+          {/* Resolution (if case is resolved) */}
+          {caseData.resolution && (
+            <div className="border rounded-lg p-5 bg-green-50 border-green-200">
+              <h2 className="font-semibold mb-4 flex items-center gap-2">
+                <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Case Resolution
+              </h2>
+              <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+                <div>
+                  <dt className="text-muted-foreground">Resolution Type</dt>
+                  <dd className="font-medium">{RESOLUTION_TYPES[caseData.resolution.type] || caseData.resolution.type}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Resolution Date</dt>
+                  <dd className="font-medium">{formatDate(caseData.resolution.date)}</dd>
+                </div>
+                {caseData.resolution.amount !== undefined && caseData.resolution.amount > 0 && (
+                  <div>
+                    <dt className="text-muted-foreground">Amount</dt>
+                    <dd className="font-medium">${(caseData.resolution.amount / 100).toLocaleString()}</dd>
+                  </div>
+                )}
+              </dl>
+              {caseData.resolution.terms && (
+                <div className="mt-3 pt-3 border-t border-green-200">
+                  <dt className="text-muted-foreground text-sm mb-1">Terms</dt>
+                  <dd className="text-sm whitespace-pre-wrap">{caseData.resolution.terms}</dd>
+                </div>
+              )}
+              {caseData.resolution.notes && (
+                <div className="mt-3 pt-3 border-t border-green-200">
+                  <dt className="text-muted-foreground text-sm mb-1">Notes</dt>
+                  <dd className="text-sm whitespace-pre-wrap">{caseData.resolution.notes}</dd>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Court Dates Section */}
+          <div ref={courtDatesSectionRef} className="border rounded-lg p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold">Court Dates ({upcomingCourtDates.length} upcoming)</h2>
+              <button
+                onClick={() => showCourtDateForm ? resetCourtDateForm() : handleQuickAddCourtDate()}
+                className="text-sm text-primary hover:underline"
+              >
+                {showCourtDateForm ? 'Cancel' : '+ Add Court Date'}
+              </button>
+            </div>
+
+            {/* Add/Edit Court Date Form */}
+            {showCourtDateForm && (
+              <div className="mb-4 p-4 bg-secondary/30 rounded-lg">
+                <h3 className="text-sm font-medium mb-3">
+                  {editingCourtDateId ? 'Update Court Date' : 'Add Court Date'}
+                </h3>
+                <form onSubmit={handleSaveCourtDate} className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Type</label>
+                      <select
+                        value={courtDateType}
+                        onChange={(e) => setCourtDateType(e.target.value)}
+                        className="w-full px-2 py-1.5 border rounded text-sm bg-background"
+                      >
+                        {Object.entries(COURT_DATE_TYPES).map(([value, label]) => (
+                          <option key={value} value={value}>{label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Date *</label>
+                      <input
+                        type="date"
+                        value={courtDateDate}
+                        onChange={(e) => setCourtDateDate(e.target.value)}
+                        className="w-full px-2 py-1.5 border rounded text-sm bg-background"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Time</label>
+                      <input
+                        type="text"
+                        value={courtDateTime}
+                        onChange={(e) => setCourtDateTime(e.target.value)}
+                        placeholder="9:00 AM"
+                        className="w-full px-2 py-1.5 border rounded text-sm bg-background"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Judge</label>
+                      <input
+                        type="text"
+                        value={courtDateJudge}
+                        onChange={(e) => setCourtDateJudge(e.target.value)}
+                        className="w-full px-2 py-1.5 border rounded text-sm bg-background"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Courtroom</label>
+                      <input
+                        type="text"
+                        value={courtDateCourtroom}
+                        onChange={(e) => setCourtDateCourtroom(e.target.value)}
+                        className="w-full px-2 py-1.5 border rounded text-sm bg-background"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Description</label>
+                    <input
+                      type="text"
+                      value={courtDateDescription}
+                      onChange={(e) => setCourtDateDescription(e.target.value)}
+                      placeholder="What this appearance is for..."
+                      className="w-full px-2 py-1.5 border rounded text-sm bg-background"
+                    />
+                  </div>
+
+                  {/* Status and Outcome - shown when editing or for completed dates */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Status</label>
+                      <select
+                        value={courtDateStatus}
+                        onChange={(e) => setCourtDateStatus(e.target.value)}
+                        className="w-full px-2 py-1.5 border rounded text-sm bg-background"
+                      >
+                        {Object.entries(COURT_DATE_STATUSES).map(([value, label]) => (
+                          <option key={value} value={value}>{label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Outcome</label>
+                      <select
+                        value={courtDateOutcome}
+                        onChange={(e) => setCourtDateOutcome(e.target.value)}
+                        className="w-full px-2 py-1.5 border rounded text-sm bg-background"
+                      >
+                        <option value="">-- No outcome yet --</option>
+                        {Object.entries(COURT_DATE_OUTCOMES).map(([value, label]) => (
+                          <option key={value} value={value}>{label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {courtDateOutcome && (
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Outcome Notes</label>
+                      <textarea
+                        value={courtDateOutcomeNotes}
+                        onChange={(e) => setCourtDateOutcomeNotes(e.target.value)}
+                        placeholder="Details about what happened..."
+                        rows={2}
+                        className="w-full px-2 py-1.5 border rounded text-sm bg-background"
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="submit"
+                      disabled={!courtDateDate || savingCourtDate}
+                      className="px-3 py-1.5 bg-primary text-primary-foreground rounded text-sm hover:opacity-90 disabled:opacity-50"
+                    >
+                      {savingCourtDate
+                        ? (editingCourtDateId ? 'Updating...' : 'Adding...')
+                        : (editingCourtDateId ? 'Update Court Date' : 'Add Court Date')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={resetCourtDateForm}
+                      className="px-3 py-1.5 border rounded text-sm hover:bg-secondary"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {courtDates.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">No court dates scheduled</p>
+            ) : (
+              <div className="space-y-3">
+                {/* Upcoming court dates */}
+                {upcomingCourtDates.map(cd => (
+                  <div key={cd.id} className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                    <div className="text-blue-600 mt-0.5">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm">{COURT_DATE_TYPES[cd.type] || cd.type}</span>
+                        <span className={`px-1.5 py-0.5 rounded text-xs ${COURT_DATE_STATUS_COLORS[cd.status]}`}>
+                          {cd.status}
+                        </span>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {formatDate(cd.date)}{cd.time && ` at ${cd.time} (CDT)`}<br/>
+                        {cd.judge && `Judge ${cd.judge}`}<br/>
+                        {cd.courtroom && `Room ${cd.courtroom}`}<br/>
+                      </p>
+                      {cd.description && (
+                        <p className="text-xs text-muted-foreground mt-1">{cd.description}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleEditCourtDate(cd)}
+                        className="text-xs text-primary hover:underline"
+                      >
+                        Update
+                      </button>
+                      <button
+                        onClick={() => handleMarkCourtDateComplete(cd.id)}
+                        className="text-xs text-green-600 hover:underline"
+                      >
+                        Complete
+                      </button>
+                      <button
+                        onClick={() => handleDeleteCourtDate(cd.id)}
+                        className="text-xs text-destructive hover:underline"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Past/completed court dates */}
+                {pastCourtDates.length > 0 && (
+                  <details className="mt-4">
+                    <summary className="text-sm text-muted-foreground cursor-pointer hover:text-foreground">
+                      {pastCourtDates.length} past court date{pastCourtDates.length !== 1 ? 's' : ''}
+                    </summary>
+                    <div className="mt-2 space-y-2">
+                      {pastCourtDates.map(cd => (
+                        <div key={cd.id} className="flex items-start gap-3 p-3 bg-secondary/30 rounded-md opacity-70">
+                          <div className="text-muted-foreground mt-0.5">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm">{COURT_DATE_TYPES[cd.type] || cd.type}</span>
+                              <span className={`px-1.5 py-0.5 rounded text-xs ${COURT_DATE_STATUS_COLORS[cd.status]}`}>
+                                {cd.status}
+                              </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              {formatDate(cd.date)}{cd.time && ` at ${cd.time} (CDT)`}
+                            </p>
+                            {cd.outcome && (
+                              <p className="text-xs mt-1">
+                                <span className="text-muted-foreground">Outcome:</span> {COURT_DATE_OUTCOMES[cd.outcome] || cd.outcome.replace(/_/g, ' ')}
+                              </p>
+                            )}
+                            {cd.outcomeNotes && (
+                              <p className="text-xs text-muted-foreground mt-1">{cd.outcomeNotes}</p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleEditCourtDate(cd)}
+                              className="text-xs text-primary hover:underline"
+                            >
+                              Update
+                            </button>
+                            <button
+                              onClick={() => handleDeleteCourtDate(cd.id)}
+                              className="text-xs text-destructive hover:underline"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
+              </div>
+            )}
           </div>
 
-          <div>
-            <label htmlFor="tags" className="block text-sm font-medium mb-1">Tags</label>
-            <input id="tags" value={tags} onChange={(e) => setTags(e.target.value)}
-              placeholder="urgent, appeal"
-              className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
-            <p className="text-xs text-muted-foreground mt-1">Comma-separated</p>
-          </div>
-        </fieldset>
+          {/* Tasks Section */}
+          <div className="border rounded-lg p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold">Tasks ({pendingTasks.length} active)</h2>
+              <Link
+                href={`/llcs/${llcId}/legal/${caseId}/tasks`}
+                className="text-sm text-primary hover:underline"
+              >
+                + Add Task
+              </Link>
+            </div>
 
-        <div className="flex items-center justify-between pt-4">
-          <div className="flex gap-3">
-            <button type="submit" disabled={submitting}
-              className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity text-sm disabled:opacity-50">
-              {submitting ? 'Saving...' : 'Save Changes'}
-            </button>
-            <button type="button" onClick={() => router.push(`/llcs/${llcId}/legal`)}
-              className="px-4 py-2 border rounded-md text-sm hover:bg-secondary transition-colors">
-              Back
-            </button>
+            {tasks.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">No tasks yet</p>
+            ) : (
+              <div className="space-y-3">
+                {pendingTasks.map(task => (
+                  <div key={task.id} className="flex items-start gap-3 p-3 bg-secondary/30 rounded-md">
+                    <div className={`mt-0.5 ${PRIORITY_COLORS[task.priority]}`}>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/llcs/${llcId}/legal/${caseId}/tasks/${task.id}`}
+                          className="font-medium text-sm hover:underline truncate"
+                        >
+                          {task.title}
+                        </Link>
+                        <span className={`px-1.5 py-0.5 rounded text-xs ${TASK_STATUS_COLORS[task.status]}`}>
+                          {task.status.replace('_', ' ')}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Due: {formatDate(task.dueDate)}
+                        {task.assignedToUserId && ` • Assigned to ${getMemberName(task.assignedToUserId)}`}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+
+                {completedTasks.length > 0 && (
+                  <details className="mt-4">
+                    <summary className="text-sm text-muted-foreground cursor-pointer hover:text-foreground">
+                      {completedTasks.length} completed task{completedTasks.length !== 1 ? 's' : ''}
+                    </summary>
+                    <div className="mt-2 space-y-2 opacity-60">
+                      {completedTasks.map(task => (
+                        <div key={task.id} className="flex items-center gap-2 p-2 text-sm">
+                          <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span className="line-through">{task.title}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
+              </div>
+            )}
           </div>
-          <button type="button" onClick={handleDelete}
-            className="px-4 py-2 text-sm text-destructive hover:bg-destructive/10 rounded-md transition-colors">
-            Delete Case
-          </button>
+
+          {/* Documents Section */}
+          <div className="border rounded-lg p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold">Documents ({documents.length})</h2>
+            </div>
+
+            {/* Upload Form */}
+            {showUploadForm && (
+              <div className="mb-4 p-4 bg-secondary/30 rounded-lg">
+                <form onSubmit={handleUpload} className="space-y-3">
+                  {uploadError && (
+                    <div className="p-2 bg-destructive/10 text-destructive rounded text-sm">
+                      {uploadError}
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Type</label>
+                      <select
+                        value={uploadType}
+                        onChange={(e) => setUploadType(e.target.value)}
+                        className="w-full px-2 py-1.5 border rounded text-sm bg-background"
+                      >
+                        {DOCUMENT_TYPES.map((type) => (
+                          <option key={type.value} value={type.value}>
+                            {type.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Title (optional)</label>
+                      <input
+                        type="text"
+                        value={uploadTitle}
+                        onChange={(e) => setUploadTitle(e.target.value)}
+                        className="w-full px-2 py-1.5 border rounded text-sm bg-background"
+                        placeholder="Document title"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Description (optional)</label>
+                    <input
+                      type="text"
+                      value={uploadDescription}
+                      onChange={(e) => setUploadDescription(e.target.value)}
+                      className="w-full px-2 py-1.5 border rounded text-sm bg-background"
+                      placeholder="Brief description of the document"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">File</label>
+                    <input
+                      type="file"
+                      onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                      className="w-full text-sm"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">PDF, Word, or images</p>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={!uploadFile || uploading}
+                    className="px-3 py-1.5 bg-primary text-primary-foreground rounded text-sm hover:opacity-90 disabled:opacity-50"
+                  >
+                    {uploading ? 'Uploading...' : 'Upload'}
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {documents.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">No documents yet</p>
+            ) : (
+              <div className="space-y-2">
+                {documents.map(doc => (
+                  <div key={doc.id} className="flex items-center gap-3 p-3 bg-secondary/30 rounded-md">
+                    <svg className="w-5 h-5 text-muted-foreground flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">{doc.title}</p>
+                      {doc.description && (
+                        <p className="text-xs text-muted-foreground truncate">{doc.description}</p>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        {doc.type.replace(/_/g, ' ')} &bull; {formatBytes(doc.sizeBytes)} &bull; {formatDate(doc.createdAt)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleDownload(doc.id)}
+                        disabled={downloadingId === doc.id}
+                        className="text-xs text-primary hover:underline disabled:opacity-50"
+                      >
+                        {downloadingId === doc.id ? 'Loading...' : 'Download'}
+                      </button>
+                      <button
+                        onClick={() => handleDeleteDocument(doc.id)}
+                        className="text-xs text-destructive hover:underline"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-      </form>
+
+        {/* Right Column - Sidebar */}
+        <div className="space-y-6">
+          {/* Quick Actions */}
+          <div className="border rounded-lg p-5">
+            <h2 className="font-semibold mb-4">Quick Actions</h2>
+            <div className="space-y-2">
+              <button
+                onClick={handleQuickAddCourtDate}
+                className="flex items-center gap-2 w-full px-3 py-2 text-sm border rounded-md hover:bg-secondary transition-colors text-left"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                Add Court Date
+              </button>
+              <Link
+                href={`/llcs/${llcId}/legal/${caseId}/tasks`}
+                className="flex items-center gap-2 w-full px-3 py-2 text-sm border rounded-md hover:bg-secondary transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Add Task
+              </Link>
+              <Link
+                href={`/llcs/${llcId}/legal/${caseId}/documents`}
+                className="flex items-center gap-2 w-full px-3 py-2 text-sm border rounded-md hover:bg-secondary transition-colors text-left"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Update Documents
+              </Link>
+              <Link
+                href={`/llcs/${llcId}/legal/${caseId}/edit`}
+                className="flex items-center gap-2 w-full px-3 py-2 text-sm border rounded-md hover:bg-secondary transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                Edit Case
+              </Link>
+            </div>
+          </div>
+
+          {/* Case Managers */}
+          <div className="border rounded-lg p-5">
+            <h2 className="font-semibold mb-4">Case Managers</h2>
+            {caseData.caseManagers.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No managers assigned</p>
+            ) : (
+              <div className="space-y-2">
+                {caseData.caseManagers.map(userId => (
+                  <div key={userId} className="flex items-center gap-2 text-sm">
+                    <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center">
+                      <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                    </div>
+                    <span>{getMemberName(userId)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Timeline */}
+          <div className="border rounded-lg p-5">
+            <h2 className="font-semibold mb-4">Timeline</h2>
+            <div className="space-y-4 text-sm">
+              {caseData.nextHearingDate && (
+                <div className="flex gap-3">
+                  <div className="w-2 h-2 mt-1.5 rounded-full bg-yellow-500"></div>
+                  <div>
+                    <p className="font-medium">Next Hearing</p>
+                    <p className="text-muted-foreground">{formatDate(caseData.nextHearingDate)}</p>
+                  </div>
+                </div>
+              )}
+              {caseData.filingDate && (
+                <div className="flex gap-3">
+                  <div className="w-2 h-2 mt-1.5 rounded-full bg-blue-500"></div>
+                  <div>
+                    <p className="font-medium">Filed</p>
+                    <p className="text-muted-foreground">{formatDate(caseData.filingDate)}</p>
+                  </div>
+                </div>
+              )}
+              <div className="flex gap-3">
+                <div className="w-2 h-2 mt-1.5 rounded-full bg-gray-400"></div>
+                <div>
+                  <p className="font-medium">Created</p>
+                  <p className="text-muted-foreground">{formatDate(caseData.createdAt)}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

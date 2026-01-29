@@ -65,6 +65,23 @@ export const opposingCounselSchema = z.object({
   address: z.string().max(500).optional(),
 });
 
+// Forward reference for caseResolutionSchema (defined below)
+const caseResolutionSchemaForCase = z.object({
+  type: z.enum([
+    'settlement',
+    'judgment_plaintiff',
+    'judgment_defendant',
+    'default_judgment',
+    'dismissal',
+    'voluntary_dismissal',
+    'other',
+  ]),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
+  amount: z.number().min(0).optional(),
+  terms: z.string().max(5000).optional(),
+  notes: z.string().max(2000).optional(),
+});
+
 export const createCaseSchema = z.object({
   propertyId: z.string().optional(),
   unitId: z.string().optional(),
@@ -82,6 +99,7 @@ export const createCaseSchema = z.object({
   caseManagers: z.array(z.string()).default([]),
   filingDate: z.string().datetime().optional(),
   nextHearingDate: z.string().datetime().optional(),
+  resolution: caseResolutionSchemaForCase.optional().nullable(),
   description: z.string().max(5000).optional(),
   tags: z.array(z.string().max(50)).max(20).optional(),
 });
@@ -125,9 +143,81 @@ export const documentTypeSchema = z.enum([
 
 export const createDocumentSchema = z.object({
   title: z.string().min(1).max(200),
+  description: z.string().max(1000).optional(),
   type: documentTypeSchema,
   fileName: z.string().min(1).max(255),
   storagePath: z.string().min(1),
   contentType: z.string().min(1).max(100),
   sizeBytes: z.number().positive(),
+});
+
+// Court Date schemas
+export const courtDateTypeSchema = z.enum([
+  'hearing',
+  'trial',
+  'motion',
+  'status_conference',
+  'pretrial_conference',
+  'mediation',
+  'settlement_conference',
+  'arraignment',
+  'sentencing',
+  'other',
+]);
+
+export const courtDateStatusSchema = z.enum([
+  'scheduled',
+  'completed',
+  'cancelled',
+  'continued',
+  'rescheduled',
+]);
+
+export const courtDateOutcomeSchema = z.enum([
+  'continued',
+  'dismissed',
+  'dismissed_with_prejudice',
+  'dismissed_without_prejudice',
+  'judgment_plaintiff',
+  'judgment_defendant',
+  'default_judgment',
+  'settled',
+  'stipulation',
+  'motion_granted',
+  'motion_denied',
+  'taken_under_advisement',
+  'other',
+]);
+
+export const createCourtDateSchema = z.object({
+  type: courtDateTypeSchema,
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
+  time: z.string().max(20).optional(),
+  judge: z.string().max(200).optional(),
+  courtroom: z.string().max(100).optional(),
+  description: z.string().max(2000).optional(),
+  status: courtDateStatusSchema.default('scheduled'),
+  outcome: courtDateOutcomeSchema.optional(),
+  outcomeNotes: z.string().max(2000).optional(),
+});
+
+export const updateCourtDateSchema = createCourtDateSchema.partial();
+
+// Case Resolution schemas
+export const resolutionTypeSchema = z.enum([
+  'settlement',
+  'judgment_plaintiff',
+  'judgment_defendant',
+  'default_judgment',
+  'dismissal',
+  'voluntary_dismissal',
+  'other',
+]);
+
+export const caseResolutionSchema = z.object({
+  type: resolutionTypeSchema,
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
+  amount: z.number().min(0).optional(), // in cents
+  terms: z.string().max(5000).optional(),
+  notes: z.string().max(2000).optional(),
 });

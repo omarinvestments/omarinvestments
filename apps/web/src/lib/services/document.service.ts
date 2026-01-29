@@ -4,6 +4,7 @@ import { DocumentType } from '@shared/types';
 
 export interface CreateDocumentInput {
   title: string;
+  description?: string;
   type: DocumentType;
   fileName: string;
   storagePath: string;
@@ -16,6 +17,7 @@ export interface DocumentRecord {
   caseId: string;
   llcId: string;
   title: string;
+  description?: string;
   type: DocumentType;
   fileName: string;
   storagePath: string;
@@ -48,6 +50,7 @@ export async function createDocument(
     caseId,
     llcId,
     title: input.title,
+    description: input.description || null,
     type: input.type,
     fileName: input.fileName,
     storagePath: input.storagePath,
@@ -76,6 +79,7 @@ export async function createDocument(
     caseId,
     llcId,
     title: input.title,
+    description: input.description,
     type: input.type as DocumentType,
     fileName: input.fileName,
     storagePath: input.storagePath,
@@ -106,6 +110,7 @@ export async function listDocuments(llcId: string, caseId: string): Promise<Docu
       caseId,
       llcId,
       title: d.title,
+      description: d.description || undefined,
       type: d.type as DocumentType,
       fileName: d.fileName,
       storagePath: d.storagePath,

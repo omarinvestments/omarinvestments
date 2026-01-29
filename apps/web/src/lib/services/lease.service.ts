@@ -250,9 +250,15 @@ export async function getLease(llcId: string, leaseId: string) {
 }
 
 /**
- * List leases for an LLC, optionally filtered by propertyId or unitId
+ * List leases for an LLC, optionally filtered by propertyId, unitId, or status
+ * Enriches leases with propertyAddress and unitLabel for display
  */
-export async function listLeases(llcId: string, propertyId?: string, unitId?: string) {
+export async function listLeases(
+  llcId: string,
+  propertyId?: string,
+  unitId?: string,
+  status?: string
+) {
   let query = adminDb
     .collection('llcs')
     .doc(llcId)
@@ -265,12 +271,69 @@ export async function listLeases(llcId: string, propertyId?: string, unitId?: st
   if (unitId) {
     query = query.where('unitId', '==', unitId);
   }
+  if (status) {
+    query = query.where('status', '==', status);
+  }
 
   const snapshot = await query.get();
 
-  return snapshot.docs.map((doc) => ({
+  const leases = snapshot.docs.map((doc) => ({
     id: doc.id,
     ...doc.data(),
+  })) as Array<Record<string, unknown>>;
+
+  // Collect unique propertyIds and unitIds
+  const propertyIds = [...new Set(leases.map((l) => l.propertyId as string).filter(Boolean))];
+  const unitKeys = [...new Set(leases.map((l) => `${l.propertyId}|${l.unitId}`).filter((k) => k !== '|'))];
+
+  // Fetch properties
+  const propertyMap = new Map<string, string>();
+  if (propertyIds.length > 0) {
+    const propertyPromises = propertyIds.map((pid) =>
+      adminDb.collection('llcs').doc(llcId).collection('properties').doc(pid).get()
+    );
+    const propertyDocs = await Promise.all(propertyPromises);
+    for (const doc of propertyDocs) {
+      if (doc.exists) {
+        const data = doc.data();
+        // Use property name, or fall back to street address
+        const name = data?.name || data?.address?.street1 || 'Unknown Property';
+        propertyMap.set(doc.id, name);
+      }
+    }
+  }
+
+  // Fetch units
+  const unitMap = new Map<string, string>();
+  if (unitKeys.length > 0) {
+    const unitPromises = unitKeys.map((key) => {
+      const [pid, uid] = key.split('|');
+      if (!pid || !uid) return Promise.resolve(null);
+      return adminDb
+        .collection('llcs')
+        .doc(llcId)
+        .collection('properties')
+        .doc(pid)
+        .collection('units')
+        .doc(uid)
+        .get();
+    });
+    const unitDocs = await Promise.all(unitPromises);
+    for (const doc of unitDocs) {
+      if (doc && doc.exists) {
+        const data = doc.data();
+        const propertyRef = doc.ref.parent.parent;
+        const key = `${propertyRef?.id}|${doc.id}`;
+        unitMap.set(key, data?.unitNumber || '');
+      }
+    }
+  }
+
+  // Enrich leases with property/unit info
+  return leases.map((lease) => ({
+    ...lease,
+    propertyName: propertyMap.get(lease.propertyId as string) || undefined,
+    unitLabel: unitMap.get(`${lease.propertyId}|${lease.unitId}`) || undefined,
   }));
 }
 
@@ -459,7 +522,7 @@ export async function renewLease(
  * Get leases that are nearing expiration (ending within daysAhead days).
  * Only returns active leases.
  */
-export async function getLeasesNearingExpiration(llcId: string, daysAhead: number = 60) {
+export async function getLeasesNearingExpiration(llcId: string, daysAhead = 60) {
   const today = new Date();
   const futureDate = new Date();
   futureDate.setDate(today.getDate() + daysAhead);

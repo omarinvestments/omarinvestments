@@ -7,6 +7,7 @@ import {
   Plaintiff,
   OpposingParty,
   OpposingCounsel,
+  CaseResolution,
 } from '@shared/types';
 
 export interface CreateCaseInput {
@@ -26,6 +27,7 @@ export interface CreateCaseInput {
   caseManagers?: string[];
   filingDate?: string;
   nextHearingDate?: string;
+  resolution?: CaseResolution | null;
   description?: string;
   tags?: string[];
 }
@@ -44,6 +46,7 @@ export interface UpdateCaseInput {
   caseManagers?: string[];
   filingDate?: string;
   nextHearingDate?: string;
+  resolution?: CaseResolution | null;
   description?: string;
   tags?: string[];
 }
@@ -67,6 +70,7 @@ export interface CaseRecord {
   caseManagers: string[];
   filingDate?: string;
   nextHearingDate?: string;
+  resolution?: CaseResolution;
   description?: string;
   tags: string[];
   createdAt: string;
@@ -102,6 +106,7 @@ export async function createCase(
     caseManagers: input.caseManagers || [],
     filingDate: input.filingDate || null,
     nextHearingDate: input.nextHearingDate || null,
+    resolution: input.resolution || null,
     description: input.description || null,
     tags: input.tags || [],
     createdAt: FieldValue.serverTimestamp(),
@@ -140,6 +145,7 @@ export async function createCase(
     caseManagers: input.caseManagers || [],
     filingDate: input.filingDate,
     nextHearingDate: input.nextHearingDate,
+    resolution: input.resolution || undefined,
     description: input.description,
     tags: input.tags || [],
     createdAt: new Date().toISOString(),
@@ -178,6 +184,7 @@ export async function listCases(llcId: string): Promise<CaseRecord[]> {
       caseManagers: d.caseManagers || [],
       filingDate: d.filingDate || undefined,
       nextHearingDate: d.nextHearingDate || undefined,
+      resolution: d.resolution || undefined,
       description: d.description || undefined,
       tags: d.tags || [],
       createdAt: d.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
@@ -199,7 +206,8 @@ export async function getCase(llcId: string, caseId: string): Promise<CaseRecord
 
   if (!doc.exists) return null;
 
-  const d = doc.data()!;
+  const d = doc.data();
+  if (!d) return null;
   return {
     id: doc.id,
     llcId,
@@ -219,6 +227,7 @@ export async function getCase(llcId: string, caseId: string): Promise<CaseRecord
     caseManagers: d.caseManagers || [],
     filingDate: d.filingDate || undefined,
     nextHearingDate: d.nextHearingDate || undefined,
+    resolution: d.resolution || undefined,
     description: d.description || undefined,
     tags: d.tags || [],
     createdAt: d.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
@@ -242,7 +251,10 @@ export async function updateCase(
     throw new Error('NOT_FOUND: Case not found');
   }
 
-  const currentData = caseDoc.data()!;
+  const currentData = caseDoc.data();
+  if (!currentData) {
+    throw new Error('INTERNAL_ERROR: Failed to read case data');
+  }
   const updateData: Record<string, unknown> = {
     updatedAt: FieldValue.serverTimestamp(),
   };
@@ -260,6 +272,7 @@ export async function updateCase(
   if (input.caseManagers !== undefined) updateData.caseManagers = input.caseManagers;
   if (input.filingDate !== undefined) updateData.filingDate = input.filingDate;
   if (input.nextHearingDate !== undefined) updateData.nextHearingDate = input.nextHearingDate;
+  if (input.resolution !== undefined) updateData.resolution = input.resolution;
   if (input.description !== undefined) updateData.description = input.description;
   if (input.tags !== undefined) updateData.tags = input.tags;
 
@@ -302,7 +315,7 @@ export async function deleteCase(
     throw new Error('NOT_FOUND: Case not found');
   }
 
-  // Check for existing tasks or documents
+  // Check for existing tasks, documents, or court dates
   const tasksSnap = await caseRef.collection('tasks').limit(1).get();
   if (!tasksSnap.empty) {
     throw new Error('HAS_CHILDREN: Cannot delete a case that has tasks. Remove tasks first.');
@@ -311,6 +324,11 @@ export async function deleteCase(
   const docsSnap = await caseRef.collection('documents').limit(1).get();
   if (!docsSnap.empty) {
     throw new Error('HAS_CHILDREN: Cannot delete a case that has documents. Remove documents first.');
+  }
+
+  const courtDatesSnap = await caseRef.collection('courtDates').limit(1).get();
+  if (!courtDatesSnap.empty) {
+    throw new Error('HAS_CHILDREN: Cannot delete a case that has court dates. Remove court dates first.');
   }
 
   const auditRef = adminDb.collection('llcs').doc(llcId).collection('auditLogs').doc();
