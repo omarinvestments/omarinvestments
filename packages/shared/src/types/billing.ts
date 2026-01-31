@@ -92,45 +92,5 @@ export type UtilityType =
   | 'cable'
   | 'other';
 
-/**
- * Work order - maintenance request
- */
-export interface WorkOrder {
-  id: string;
-  llcId: string;
-  propertyId: string;
-  unitId?: string;
-  requestedByTenantId?: string;
-  requestedByUserId?: string;
-  title: string;
-  description: string;
-  category: WorkOrderCategory;
-  priority: 'low' | 'medium' | 'high' | 'emergency';
-  status: WorkOrderStatus;
-  assignedVendorId?: string;
-  assignedToUserId?: string;
-  scheduledDate?: string;
-  completedAt?: Timestamp;
-  cost?: number;
-  notes?: string;
-  createdAt: Timestamp;
-  updatedAt?: Timestamp;
-}
-
-export type WorkOrderCategory =
-  | 'plumbing'
-  | 'electrical'
-  | 'hvac'
-  | 'appliance'
-  | 'structural'
-  | 'pest_control'
-  | 'landscaping'
-  | 'cleaning'
-  | 'other';
-
-export type WorkOrderStatus =
-  | 'open'
-  | 'assigned'
-  | 'in_progress'
-  | 'completed'
-  | 'canceled';
+// Note: Work Order types have been moved to ./workOrder.ts for enhanced functionality
+// Import from '@shared/types' to access WorkOrder, WorkOrderCategory, WorkOrderStatus

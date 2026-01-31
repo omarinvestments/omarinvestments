@@ -10,20 +10,51 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // =========================================================================
+    // RBAC Helper Functions (New System)
+    // =========================================================================
+
+    // Check if user is a super-admin
+    function isSuperAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isSuperAdmin == true;
+    }
+
+    // Get user's LLC member document
     function memberDoc(llcId) {
       return get(/databases/$(database)/documents/llcs/$(llcId)/members/$(request.auth.uid));
     }
 
-    function isMember(llcId) {
-      return isSignedIn() && memberDoc(llcId).data.status == "active";
+    // Check if user is an LLC admin (via members collection)
+    function isLlcAdmin(llcId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/llcs/$(llcId)/members/$(request.auth.uid)) &&
+        memberDoc(llcId).data.status == "active" &&
+        memberDoc(llcId).data.role == "admin";
     }
 
+    // Check if user is an active member of an LLC (legacy support)
+    function isMember(llcId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/llcs/$(llcId)/members/$(request.auth.uid)) &&
+        memberDoc(llcId).data.status == "active";
+    }
+
+    // Get user's role in an LLC
     function role(llcId) {
       return memberDoc(llcId).data.role;
     }
 
+    // Check if user has one of the specified roles
     function hasRole(llcId, roles) {
       return isMember(llcId) && roles.hasAny([role(llcId)]);
+    }
+
+    // Check if user has LLC access via assignments
+    function hasLlcAssignment(llcId) {
+      // Note: This is a simplified check. Full assignment validation done server-side.
+      return isSuperAdmin() || isLlcAdmin(llcId);
     }
 
     // Property scoping: if user has property scopes, limit access
@@ -37,6 +68,51 @@ service cloud.firestore {
       let r = role(llcId);
       let scopes = memberDoc(llcId).data.caseScopes;
       return r == "admin" || r == "legal" || (scopes != null && scopes.hasAny([caseId]));
+    }
+
+    // =========================================================================
+    // Users (Unified user collection)
+    // =========================================================================
+
+    match /users/{userId} {
+      // Users can read their own record
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      // Super-admins can read all
+      allow read: if isSuperAdmin();
+      // Only server (Admin SDK) can write
+      allow write: if false;
+    }
+
+    // =========================================================================
+    // User Assignments (RBAC - New)
+    // =========================================================================
+
+    match /userAssignments/{assignmentId} {
+      // Users can read their own assignments
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      // Super-admins can read all
+      allow read: if isSuperAdmin();
+      // Only server (Admin SDK) can write
+      allow write: if false;
+    }
+
+    // =========================================================================
+    // Global Tasks (RBAC - New)
+    // =========================================================================
+
+    match /globalTasks/{taskId} {
+      // Users can read tasks assigned to them
+      allow read: if isSignedIn() && resource.data.assignedToUserId == request.auth.uid;
+      // Users can read tasks they created
+      allow read: if isSignedIn() && resource.data.createdByUserId == request.auth.uid;
+      // Super-admins can read all
+      allow read: if isSuperAdmin();
+      // LLC admins can read tasks in their LLCs
+      allow read: if isSignedIn() &&
+        resource.data.llcId != null &&
+        isLlcAdmin(resource.data.llcId);
+      // Only server (Admin SDK) can write
+      allow write: if false;
     }
 
     // =========================================================================
@@ -68,12 +144,20 @@ service cloud.firestore {
     // =========================================================================
 
     match /llcs/{llcId} {
+      // Super-admin can read all LLCs
+      allow read: if isSuperAdmin();
+      // Members can read their LLC
       allow read: if isMember(llcId);
+      // Only admins (or super-admins via server) can write
       allow write: if hasRole(llcId, ["admin"]);
     }
 
     match /llcs/{llcId}/members/{userId} {
+      // Super-admin can read all members
+      allow read: if isSuperAdmin();
+      // Members can read their LLC's members
       allow read: if isMember(llcId);
+      // Only admins can write
       allow write: if hasRole(llcId, ["admin"]);
     }
 
@@ -82,23 +166,23 @@ service cloud.firestore {
     // =========================================================================
 
     match /llcs/{llcId}/properties/{propertyId} {
-      allow read: if isMember(llcId) && canAccessProperty(llcId, propertyId);
-      allow create, update, delete: if hasRole(llcId, ["admin", "manager"]);
+      allow read: if isSuperAdmin() || (isMember(llcId) && canAccessProperty(llcId, propertyId));
+      allow create, update, delete: if isSuperAdmin() || hasRole(llcId, ["admin", "manager"]);
     }
 
     match /llcs/{llcId}/properties/{propertyId}/units/{unitId} {
-      allow read: if isMember(llcId) && canAccessProperty(llcId, propertyId);
-      allow create, update, delete: if hasRole(llcId, ["admin", "manager"]);
+      allow read: if isSuperAdmin() || (isMember(llcId) && canAccessProperty(llcId, propertyId));
+      allow create, update, delete: if isSuperAdmin() || hasRole(llcId, ["admin", "manager"]);
     }
 
     // =========================================================================
-    // Tenants
+    // Tenants (LLC-scoped)
     // =========================================================================
 
     match /llcs/{llcId}/tenants/{tenantId} {
-      allow read: if hasRole(llcId, ["admin", "manager", "legal", "accounting"])
+      allow read: if isSuperAdmin() || hasRole(llcId, ["admin", "manager", "legal", "accounting"])
                   || (role(llcId) == "tenant" && resource.data.userId == request.auth.uid);
-      allow write: if hasRole(llcId, ["admin", "manager", "legal"]);
+      allow write: if isSuperAdmin() || hasRole(llcId, ["admin", "manager", "legal"]);
     }
 
     // =========================================================================
@@ -106,11 +190,16 @@ service cloud.firestore {
     // =========================================================================
 
     match /llcs/{llcId}/leases/{leaseId} {
-      allow read: if isMember(llcId) && (
+      allow read: if isSuperAdmin() || (isMember(llcId) && (
         hasRole(llcId, ["admin", "manager", "legal", "accounting"]) ||
         (role(llcId) == "tenant" && request.auth.uid in resource.data.tenantUserIds)
-      );
-      allow write: if hasRole(llcId, ["admin", "manager", "legal"]);
+      ));
+      allow write: if isSuperAdmin() || hasRole(llcId, ["admin", "manager", "legal"]);
+    }
+
+    match /llcs/{llcId}/leases/{leaseId}/documents/{docId} {
+      allow read: if isSuperAdmin() || hasRole(llcId, ["admin", "manager", "legal", "accounting"]);
+      allow write: if isSuperAdmin() || hasRole(llcId, ["admin", "manager"]);
     }
 
     // =========================================================================
@@ -118,13 +207,13 @@ service cloud.firestore {
     // =========================================================================
 
     match /llcs/{llcId}/charges/{chargeId} {
-      allow read: if hasRole(llcId, ["admin", "manager", "accounting", "legal"])
+      allow read: if isSuperAdmin() || hasRole(llcId, ["admin", "manager", "accounting", "legal"])
                   || (role(llcId) == "tenant" && request.auth.uid == resource.data.tenantUserId);
-      allow write: if hasRole(llcId, ["admin", "accounting"]);
+      allow write: if isSuperAdmin() || hasRole(llcId, ["admin", "accounting"]);
     }
 
     match /llcs/{llcId}/payments/{paymentId} {
-      allow read: if hasRole(llcId, ["admin", "manager", "accounting", "legal"])
+      allow read: if isSuperAdmin() || hasRole(llcId, ["admin", "manager", "accounting", "legal"])
                   || (role(llcId) == "tenant" && request.auth.uid == resource.data.tenantUserId);
       allow create: if role(llcId) == "tenant";
       allow update, delete: if false; // Functions only (webhook)
@@ -135,7 +224,7 @@ service cloud.firestore {
     // =========================================================================
 
     match /llcs/{llcId}/ledgerEntries/{entryId} {
-      allow read: if hasRole(llcId, ["admin", "accounting", "manager"]);
+      allow read: if isSuperAdmin() || hasRole(llcId, ["admin", "accounting", "manager"]);
       allow write: if false; // Functions only
     }
 
@@ -144,30 +233,43 @@ service cloud.firestore {
     // =========================================================================
 
     match /llcs/{llcId}/vendors/{vendorId} {
-      allow read: if hasRole(llcId, ["admin", "manager", "accounting"]);
-      allow write: if hasRole(llcId, ["admin", "accounting"]);
+      allow read: if isSuperAdmin() || hasRole(llcId, ["admin", "manager", "accounting"]);
+      allow write: if isSuperAdmin() || hasRole(llcId, ["admin", "accounting"]);
     }
 
     match /llcs/{llcId}/bills/{billId} {
-      allow read: if hasRole(llcId, ["admin", "manager", "accounting"]);
-      allow write: if hasRole(llcId, ["admin", "accounting"]);
+      allow read: if isSuperAdmin() || hasRole(llcId, ["admin", "manager", "accounting"]);
+      allow write: if isSuperAdmin() || hasRole(llcId, ["admin", "accounting"]);
     }
 
     match /llcs/{llcId}/utilityAccounts/{utilityId} {
-      allow read: if hasRole(llcId, ["admin", "manager", "accounting"]);
-      allow write: if hasRole(llcId, ["admin", "accounting"]);
+      allow read: if isSuperAdmin() || hasRole(llcId, ["admin", "manager", "accounting"]);
+      allow write: if isSuperAdmin() || hasRole(llcId, ["admin", "accounting"]);
     }
 
     // =========================================================================
-    // Work Orders
+    // Work Orders (Updated for RBAC)
     // =========================================================================
 
     match /llcs/{llcId}/workOrders/{workOrderId} {
-      allow read: if hasRole(llcId, ["admin", "manager", "maintenance"])
-                  || (role(llcId) == "tenant" && resource.data.requestedByTenantId == request.auth.uid);
-      allow create: if hasRole(llcId, ["admin", "manager", "maintenance", "tenant"]);
-      allow update: if hasRole(llcId, ["admin", "manager", "maintenance"]);
-      allow delete: if hasRole(llcId, ["admin", "manager"]);
+      // Super-admin has full access
+      allow read: if isSuperAdmin();
+      // LLC admins and managers can read
+      allow read: if hasRole(llcId, ["admin", "manager", "maintenance"]);
+      // Tenant who requested can read their own
+      allow read: if role(llcId) == "tenant" && resource.data.requestedByTenantId == request.auth.uid;
+      // Assigned employees can read (checked server-side via assignedEmployeeIds)
+      allow read: if isSignedIn() && request.auth.uid in resource.data.assignedEmployeeIds;
+
+      // Create permissions
+      allow create: if isSuperAdmin() || hasRole(llcId, ["admin", "manager", "maintenance", "tenant"]);
+
+      // Update permissions
+      allow update: if isSuperAdmin() || hasRole(llcId, ["admin", "manager", "maintenance"]);
+      allow update: if isSignedIn() && request.auth.uid in resource.data.assignedEmployeeIds;
+
+      // Delete (cancel) permissions
+      allow delete: if isSuperAdmin() || hasRole(llcId, ["admin", "manager"]);
     }
 
     // =========================================================================
@@ -175,18 +277,32 @@ service cloud.firestore {
     // =========================================================================
 
     match /llcs/{llcId}/cases/{caseId} {
-      allow read: if isMember(llcId) && canAccessCase(llcId, caseId);
-      allow write: if hasRole(llcId, ["admin", "legal"]);
+      allow read: if isSuperAdmin() || (isMember(llcId) && canAccessCase(llcId, caseId));
+      allow write: if isSuperAdmin() || hasRole(llcId, ["admin", "legal"]);
     }
 
     match /llcs/{llcId}/cases/{caseId}/tasks/{taskId} {
-      allow read: if isMember(llcId) && canAccessCase(llcId, caseId);
-      allow write: if hasRole(llcId, ["admin", "legal"]);
+      allow read: if isSuperAdmin() || (isMember(llcId) && canAccessCase(llcId, caseId));
+      allow write: if isSuperAdmin() || hasRole(llcId, ["admin", "legal"]);
     }
 
     match /llcs/{llcId}/cases/{caseId}/documents/{docId} {
-      allow read: if isMember(llcId) && canAccessCase(llcId, caseId);
-      allow write: if hasRole(llcId, ["admin", "legal"]);
+      allow read: if isSuperAdmin() || (isMember(llcId) && canAccessCase(llcId, caseId));
+      allow write: if isSuperAdmin() || hasRole(llcId, ["admin", "legal"]);
+    }
+
+    match /llcs/{llcId}/cases/{caseId}/courtDates/{courtDateId} {
+      allow read: if isSuperAdmin() || (isMember(llcId) && canAccessCase(llcId, caseId));
+      allow write: if isSuperAdmin() || hasRole(llcId, ["admin", "legal"]);
+    }
+
+    // =========================================================================
+    // Lease Templates
+    // =========================================================================
+
+    match /llcs/{llcId}/leaseTemplates/{templateId} {
+      allow read: if isSuperAdmin() || hasRole(llcId, ["admin", "manager", "legal"]);
+      allow write: if isSuperAdmin() || hasRole(llcId, ["admin"]);
     }
 
     // =========================================================================
@@ -194,7 +310,7 @@ service cloud.firestore {
     // =========================================================================
 
     match /llcs/{llcId}/auditLogs/{logId} {
-      allow read: if hasRole(llcId, ["admin", "legal", "accounting"]);
+      allow read: if isSuperAdmin() || hasRole(llcId, ["admin", "legal", "accounting"]);
       allow write: if false; // Functions only
     }
 

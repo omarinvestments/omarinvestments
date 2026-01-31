@@ -223,7 +223,7 @@ export default function PropertiesPage({ params }: PropertiesPageProps) {
                         {property.name || property.address.street1}
                       </div>
                       <div className="text-muted-foreground text-xs">
-                        {property.address.city}, {property.address.state} {property.address.zipCode}
+                        {property.address.street1}, {property.address.city}, {property.address.state} {property.address.zipCode}
                       </div>
                     </Link>
                   </td>

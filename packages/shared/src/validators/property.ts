@@ -22,6 +22,12 @@ export const propertyStatusSchema = z.enum([
   PROPERTY_STATUSES.sold,
 ]);
 
+export const marketValueEntrySchema = z.object({
+  year: z.number().int().min(1900).max(2100),
+  value: z.number().nonnegative(), // In cents
+  totalTax: z.number().nonnegative().optional(), // Annual tax in cents for that year
+});
+
 export const parcelInfoSchema = z.object({
   pid: z.string().max(50).optional(),
   parcelAreaSqft: z.number().positive().optional(),
@@ -30,6 +36,9 @@ export const parcelInfoSchema = z.object({
   lot: z.string().max(50).optional(),
   block: z.string().max(50).optional(),
   metesAndBounds: z.string().max(500).optional(),
+  // Market values by year (allows tracking historical values)
+  marketValues: z.array(marketValueEntrySchema).optional(),
+  // Legacy fields (deprecated, use marketValues instead)
   assessedYear: z.number().int().min(1900).max(2100).optional(),
   marketValue: z.number().nonnegative().optional(),
   totalTax: z.number().nonnegative().optional(),

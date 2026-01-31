@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth } from '@/lib/firebase/admin';
 import { cookies } from 'next/headers';
+import { getOrCreateUser, updateLastLogin } from '@/lib/services/user.service';
 
 const SESSION_COOKIE_NAME = '__session';
 const SESSION_EXPIRY_DAYS = 14;
@@ -47,6 +48,16 @@ export async function POST(request: NextRequest) {
       sameSite: 'lax',
       path: '/',
     });
+
+    // Auto-create user record if it doesn't exist (defaults to tenant)
+    // and update last login timestamp
+    try {
+      await getOrCreateUser(decodedToken.uid);
+      await updateLastLogin(decodedToken.uid);
+    } catch (err) {
+      // Log but don't fail the login if user creation fails
+      console.error('Failed to create/update user record:', err);
+    }
 
     return NextResponse.json({ status: 'success' });
   } catch (error) {

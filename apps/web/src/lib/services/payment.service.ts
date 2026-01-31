@@ -195,7 +195,10 @@ export async function getPayment(
     return null;
   }
 
-  const data = paymentDoc.data()!;
+  const data = await paymentDoc.data();
+  if (!data) {
+    return null;
+  }
   return {
     id: paymentDoc.id,
     llcId: data.llcId,

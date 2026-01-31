@@ -5,6 +5,12 @@ import Link from 'next/link';
 import { use } from 'react';
 import { PropertyUnitsTable } from '@/components/PropertyUnitsTable';
 
+interface MarketValueEntry {
+  year: number;
+  value: number;
+  totalTax?: number;
+}
+
 interface PropertyData {
   id: string;
   name?: string;
@@ -24,6 +30,8 @@ interface PropertyData {
   parcelInfo?: {
     pid?: string;
     parcelAreaSqft?: number;
+    marketValues?: MarketValueEntry[];
+    // Legacy fields
     marketValue?: number;
     totalTax?: number;
   };
@@ -147,7 +155,7 @@ export default function PropertyPage({ params }: PropertyPageProps) {
       </div>
 
       {/* Financial Info */}
-      {(property.purchasePrice || property.parcelInfo?.marketValue || property.parcelInfo?.totalTax) && (
+      {(property.purchasePrice || property.parcelInfo?.marketValues?.length || property.parcelInfo?.marketValue) && (
         <div className="mb-8">
           <h2 className="text-lg font-semibold mb-4">Financial Information</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
@@ -162,19 +170,50 @@ export default function PropertyPage({ params }: PropertyPageProps) {
                 )}
               </div>
             )}
-            {property.parcelInfo?.marketValue && (
+          </div>
+
+          {/* Market Values by Year */}
+          {property.parcelInfo?.marketValues && property.parcelInfo.marketValues.length > 0 ? (
+            <div className="mt-6">
+              <h3 className="text-sm font-medium text-muted-foreground mb-3">Market Values by Year</h3>
+              <div className="border rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-secondary/50">
+                    <tr>
+                      <th className="text-left px-4 py-2 font-medium">Year</th>
+                      <th className="text-right px-4 py-2 font-medium">Market Value</th>
+                      <th className="text-right px-4 py-2 font-medium">Annual Tax</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {property.parcelInfo.marketValues
+                      .sort((a, b) => b.year - a.year)
+                      .map((mv, idx) => (
+                        <tr key={idx} className="border-t">
+                          <td className="px-4 py-2">{mv.year}</td>
+                          <td className="px-4 py-2 text-right font-medium">{formatMoney(mv.value)}</td>
+                          <td className="px-4 py-2 text-right">{mv.totalTax ? formatMoney(mv.totalTax) : '—'}</td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : property.parcelInfo?.marketValue ? (
+            // Legacy single value display
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-4">
               <div className="bg-secondary/30 rounded-lg p-4">
                 <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Market Value</div>
                 <div className="font-medium">{formatMoney(property.parcelInfo.marketValue)}</div>
               </div>
-            )}
-            {property.parcelInfo?.totalTax && (
-              <div className="bg-secondary/30 rounded-lg p-4">
-                <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Annual Tax</div>
-                <div className="font-medium">{formatMoney(property.parcelInfo.totalTax)}</div>
-              </div>
-            )}
-          </div>
+              {property.parcelInfo.totalTax && (
+                <div className="bg-secondary/30 rounded-lg p-4">
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Annual Tax</div>
+                  <div className="font-medium">{formatMoney(property.parcelInfo.totalTax)}</div>
+                </div>
+              )}
+            </div>
+          ) : null}
         </div>
       )}
 

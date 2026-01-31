@@ -1,6 +1,12 @@
 import { adminDb } from '@/lib/firebase/admin';
 import { FieldValue } from 'firebase-admin/firestore';
 
+export interface MarketValueEntryInput {
+  year: number;
+  value: number; // In cents
+  totalTax?: number; // Annual tax in cents for that year
+}
+
 export interface ParcelInfoInput {
   pid?: string;
   parcelAreaSqft?: number;
@@ -9,6 +15,9 @@ export interface ParcelInfoInput {
   lot?: string;
   block?: string;
   metesAndBounds?: string;
+  // Market values by year (allows tracking historical values)
+  marketValues?: MarketValueEntryInput[];
+  // Legacy fields (deprecated, use marketValues instead)
   assessedYear?: number;
   marketValue?: number;
   totalTax?: number;

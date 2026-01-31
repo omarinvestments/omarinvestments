@@ -31,8 +31,7 @@ export default function NewPropertyPage({ params }: NewPropertyPageProps) {
   const [lot, setLot] = useState('');
   const [block, setBlock] = useState('');
   const [metesAndBounds, setMetesAndBounds] = useState('');
-  const [marketValue, setMarketValue] = useState('');
-  const [totalTax, setTotalTax] = useState('');
+  const [marketValues, setMarketValues] = useState<{ year: string; value: string; totalTax: string }[]>([]);
   const [countyPropertyType, setCountyPropertyType] = useState('');
   const [homestead, setHomestead] = useState(false);
   const [schoolDistrict, setSchoolDistrict] = useState('');
@@ -72,8 +71,15 @@ export default function NewPropertyPage({ params }: NewPropertyPageProps) {
             lot: lot || undefined,
             block: block || undefined,
             metesAndBounds: metesAndBounds || undefined,
-            marketValue: marketValue ? Math.round(parseFloat(marketValue) * 100) : undefined,
-            totalTax: totalTax ? Math.round(parseFloat(totalTax) * 100) : undefined,
+            marketValues: marketValues.length > 0
+              ? marketValues
+                  .filter(mv => mv.year && mv.value)
+                  .map(mv => ({
+                    year: parseInt(mv.year),
+                    value: Math.round(parseFloat(mv.value) * 100),
+                    totalTax: mv.totalTax ? Math.round(parseFloat(mv.totalTax) * 100) : undefined,
+                  }))
+              : undefined,
             countyPropertyType: countyPropertyType || undefined,
             homestead,
             schoolDistrict: schoolDistrict || undefined,
@@ -146,6 +152,7 @@ export default function NewPropertyPage({ params }: NewPropertyPageProps) {
             >
               <option value="residential">Residential</option>
               <option value="commercial">Commercial</option>
+              <option value="land-industrial">Land Industrial</option>
               <option value="mixed">Mixed Use</option>
             </select>
           </div>
@@ -397,50 +404,104 @@ export default function NewPropertyPage({ params }: NewPropertyPageProps) {
             />
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label htmlFor="marketValue" className="block text-sm font-medium mb-2">
-                Market Value ($)
+          <div>
+            <label htmlFor="countyPropertyType" className="block text-sm font-medium mb-2">
+              Co. Property Type
+            </label>
+            <input
+              id="countyPropertyType"
+              type="text"
+              value={countyPropertyType}
+              onChange={(e) => setCountyPropertyType(e.target.value)}
+              className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+              placeholder="e.g. Industrial-Preferred"
+            />
+          </div>
+
+          {/* Market Values by Year */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="block text-sm font-medium">
+                Market Values by Year
               </label>
-              <input
-                id="marketValue"
-                type="number"
-                step="0.01"
-                min="0"
-                value={marketValue}
-                onChange={(e) => setMarketValue(e.target.value)}
-                className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder="0.00"
-              />
+              <button
+                type="button"
+                onClick={() => setMarketValues([...marketValues, { year: new Date().getFullYear().toString(), value: '', totalTax: '' }])}
+                className="text-sm text-primary hover:underline"
+              >
+                + Add Year
+              </button>
             </div>
-            <div>
-              <label htmlFor="totalTax" className="block text-sm font-medium mb-2">
-                Annual Tax ($)
-              </label>
-              <input
-                id="totalTax"
-                type="number"
-                step="0.01"
-                min="0"
-                value={totalTax}
-                onChange={(e) => setTotalTax(e.target.value)}
-                className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder="0.00"
-              />
-            </div>
-            <div>
-              <label htmlFor="countyPropertyType" className="block text-sm font-medium mb-2">
-                Co. Property Type
-              </label>
-              <input
-                id="countyPropertyType"
-                type="text"
-                value={countyPropertyType}
-                onChange={(e) => setCountyPropertyType(e.target.value)}
-                className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder="e.g. Industrial-Preferred"
-              />
-            </div>
+            {marketValues.length === 0 && (
+              <p className="text-sm text-muted-foreground">No market values added yet.</p>
+            )}
+            {marketValues.map((mv, idx) => (
+              <div key={idx} className="grid grid-cols-10 gap-3 items-end">
+                <div className="col-span-2">
+                  <label className="block text-xs text-muted-foreground mb-1">Year</label>
+                  <input
+                    type="number"
+                    min="1900"
+                    max="2100"
+                    value={mv.year}
+                    onChange={(e) => {
+                      const updated = [...marketValues];
+                      if (updated[idx]) {
+                        updated[idx].year = e.target.value;
+                        setMarketValues(updated);
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                    placeholder="2024"
+                  />
+                </div>
+                <div className="col-span-3">
+                  <label className="block text-xs text-muted-foreground mb-1">Market Value ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={mv.value}
+                    onChange={(e) => {
+                      const updated = [...marketValues];
+                      if (updated[idx]) {
+                      updated[idx].value = e.target.value;
+                      setMarketValues(updated);
+                    }
+                    }}
+                    className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="col-span-3">
+                  <label className="block text-xs text-muted-foreground mb-1">Annual Tax ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={mv.totalTax}
+                    onChange={(e) => {
+                      const updated = [...marketValues];
+                      if (updated[idx]) {
+                      updated[idx].totalTax = e.target.value;
+                      setMarketValues(updated);
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <button
+                    type="button"
+                    onClick={() => setMarketValues(marketValues.filter((_, i) => i !== idx))}
+                    className="px-3 py-2 text-sm text-destructive hover:bg-destructive/10 rounded-md"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
 
           <div className="grid grid-cols-3 gap-4">

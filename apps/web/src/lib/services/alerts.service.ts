@@ -1,6 +1,6 @@
 import { adminDb } from '@/lib/firebase/admin';
 
-export type AlertType = 'lease_expiring' | 'charge_overdue' | 'case_hearing' | 'task_due';
+export type AlertType = 'lease_expiring' | 'charge_overdue' | 'payment_due' | 'case_hearing' | 'task_due';
 export type AlertSeverity = 'warning' | 'critical';
 
 export interface Alert {
@@ -60,6 +60,9 @@ async function getLlcAlerts(llcId: string, llcName: string): Promise<Alert[]> {
   const sevenDaysFromNow = new Date();
   sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
   const futureDate7 = sevenDaysFromNow.toISOString().slice(0, 10);
+  const fiveDaysFromNow = new Date();
+  fiveDaysFromNow.setDate(fiveDaysFromNow.getDate() + 5);
+  const futureDate5 = fiveDaysFromNow.toISOString().slice(0, 10);
 
   const llcRef = adminDb.collection('llcs').doc(llcId);
 
@@ -120,6 +123,37 @@ async function getLlcAlerts(llcId: string, llcName: string): Promise<Alert[]> {
         dueDate: charge.dueDate,
         amount: outstanding,
       });
+    }
+  }
+
+  // Process upcoming payments due within 5 days
+  for (const doc of chargesSnap.docs) {
+    const charge = doc.data();
+    // Due date is today or in the future, but within 5 days
+    if (charge.dueDate >= today && charge.dueDate <= futureDate5) {
+      const daysUntilDue = Math.ceil(
+        (new Date(charge.dueDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+      );
+      const outstanding = (charge.amount || 0) - (charge.paidAmount || 0);
+
+      // Only alert if there's an outstanding balance
+      if (outstanding > 0) {
+        alerts.push({
+          id: `payment-${doc.id}`,
+          type: 'payment_due',
+          severity: daysUntilDue <= 2 ? 'critical' : 'warning',
+          title: 'Payment Due',
+          description: daysUntilDue === 0
+            ? `$${(outstanding / 100).toFixed(2)} due today`
+            : `$${(outstanding / 100).toFixed(2)} due in ${daysUntilDue} day${daysUntilDue > 1 ? 's' : ''}`,
+          llcId,
+          llcName,
+          entityType: 'charge',
+          entityId: doc.id,
+          dueDate: charge.dueDate,
+          amount: outstanding,
+        });
+      }
     }
   }
 

@@ -32,8 +32,7 @@ export default function EditPropertyPage({ params }: EditPropertyPageProps) {
   const [lot, setLot] = useState('');
   const [block, setBlock] = useState('');
   const [metesAndBounds, setMetesAndBounds] = useState('');
-  const [marketValue, setMarketValue] = useState('');
-  const [totalTax, setTotalTax] = useState('');
+  const [marketValues, setMarketValues] = useState<{ year: string; value: string; totalTax: string }[]>([]);
   const [countyPropertyType, setCountyPropertyType] = useState('');
   const [homestead, setHomestead] = useState(false);
   const [schoolDistrict, setSchoolDistrict] = useState('');
@@ -70,8 +69,23 @@ export default function EditPropertyPage({ params }: EditPropertyPageProps) {
           setLot(p.parcelInfo?.lot || '');
           setBlock(p.parcelInfo?.block || '');
           setMetesAndBounds(p.parcelInfo?.metesAndBounds || '');
-          setMarketValue(p.parcelInfo?.marketValue ? (p.parcelInfo.marketValue / 100).toString() : '');
-          setTotalTax(p.parcelInfo?.totalTax ? (p.parcelInfo.totalTax / 100).toString() : '');
+          // Load market values array or migrate from legacy single value
+          if (p.parcelInfo?.marketValues?.length > 0) {
+            setMarketValues(
+              p.parcelInfo.marketValues.map((mv: { year: number; value: number; totalTax?: number }) => ({
+                year: mv.year.toString(),
+                value: (mv.value / 100).toString(),
+                totalTax: mv.totalTax ? (mv.totalTax / 100).toString() : '',
+              }))
+            );
+          } else if (p.parcelInfo?.marketValue) {
+            // Migrate legacy single value
+            setMarketValues([{
+              year: p.parcelInfo.assessedYear?.toString() || new Date().getFullYear().toString(),
+              value: (p.parcelInfo.marketValue / 100).toString(),
+              totalTax: p.parcelInfo.totalTax ? (p.parcelInfo.totalTax / 100).toString() : '',
+            }]);
+          }
           setCountyPropertyType(p.parcelInfo?.countyPropertyType || '');
           setHomestead(p.parcelInfo?.homestead || false);
           setSchoolDistrict(p.parcelInfo?.schoolDistrict || '');
@@ -123,8 +137,15 @@ export default function EditPropertyPage({ params }: EditPropertyPageProps) {
             lot: lot || undefined,
             block: block || undefined,
             metesAndBounds: metesAndBounds || undefined,
-            marketValue: marketValue ? Math.round(parseFloat(marketValue) * 100) : undefined,
-            totalTax: totalTax ? Math.round(parseFloat(totalTax) * 100) : undefined,
+            marketValues: marketValues.length > 0
+              ? marketValues
+                  .filter(mv => mv.year && mv.value)
+                  .map(mv => ({
+                    year: parseInt(mv.year),
+                    value: Math.round(parseFloat(mv.value) * 100),
+                    totalTax: mv.totalTax ? Math.round(parseFloat(mv.totalTax) * 100) : undefined,
+                  }))
+              : undefined,
             countyPropertyType: countyPropertyType || undefined,
             homestead,
             schoolDistrict: schoolDistrict || undefined,
@@ -226,6 +247,8 @@ export default function EditPropertyPage({ params }: EditPropertyPageProps) {
                 <option value="residential">Residential</option>
                 <option value="commercial">Commercial</option>
                 <option value="mixed">Mixed Use</option>
+                <option value="land">Land - Commercial</option>
+                <option value="industrial">Land - Industrial</option>
               </select>
             </div>
             <div>
@@ -481,47 +504,103 @@ export default function EditPropertyPage({ params }: EditPropertyPageProps) {
             />
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label htmlFor="marketValue" className="block text-sm font-medium mb-2">
-                Market Value ($)
+          <div>
+            <label htmlFor="countyPropertyType" className="block text-sm font-medium mb-2">
+              Co. Property Type
+            </label>
+            <input
+              id="countyPropertyType"
+              type="text"
+              value={countyPropertyType}
+              onChange={(e) => setCountyPropertyType(e.target.value)}
+              className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+
+          {/* Market Values by Year */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="block text-sm font-medium">
+                Market Values by Year
               </label>
-              <input
-                id="marketValue"
-                type="number"
-                step="0.01"
-                min="0"
-                value={marketValue}
-                onChange={(e) => setMarketValue(e.target.value)}
-                className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-              />
+              <button
+                type="button"
+                onClick={() => setMarketValues([...marketValues, { year: new Date().getFullYear().toString(), value: '', totalTax: '' }])}
+                className="text-sm text-primary hover:underline"
+              >
+                + Add Year
+              </button>
             </div>
-            <div>
-              <label htmlFor="totalTax" className="block text-sm font-medium mb-2">
-                Annual Tax ($)
-              </label>
-              <input
-                id="totalTax"
-                type="number"
-                step="0.01"
-                min="0"
-                value={totalTax}
-                onChange={(e) => setTotalTax(e.target.value)}
-                className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
-            <div>
-              <label htmlFor="countyPropertyType" className="block text-sm font-medium mb-2">
-                Co. Property Type
-              </label>
-              <input
-                id="countyPropertyType"
-                type="text"
-                value={countyPropertyType}
-                onChange={(e) => setCountyPropertyType(e.target.value)}
-                className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
+            {marketValues.length === 0 && (
+              <p className="text-sm text-muted-foreground">No market values added yet.</p>
+            )}
+            {marketValues.map((mv, idx) => (
+              <div key={idx} className="grid grid-cols-10 gap-3 items-end">
+                <div className="col-span-2">
+                  <label className="block text-xs text-muted-foreground mb-1">Year</label>
+                  <input
+                    type="number"
+                    min="1900"
+                    max="2100"
+                    value={mv.year}
+                    onChange={(e) => {
+                      const updated = [...marketValues];
+                      if (updated[idx]) {
+                        updated[idx].year = e.target.value;
+                        setMarketValues(updated);
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                    placeholder="2024"
+                  />
+                </div>
+                <div className="col-span-3">
+                  <label className="block text-xs text-muted-foreground mb-1">Market Value ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={mv.value}
+                    onChange={(e) => {
+                      const updated = [...marketValues];
+                      if (updated[idx]) {
+                        updated[idx].value = e.target.value;
+                        setMarketValues(updated);
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="col-span-3">
+                  <label className="block text-xs text-muted-foreground mb-1">Annual Tax ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={mv.totalTax}
+                    onChange={(e) => {
+                      const updated = [...marketValues];
+                      if (updated[idx]) {
+                        updated[idx].totalTax = e.target.value;
+                        setMarketValues(updated);
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <button
+                    type="button"
+                    onClick={() => setMarketValues(marketValues.filter((_, i) => i !== idx))}
+                    className="px-3 py-2 text-sm text-destructive hover:bg-destructive/10 rounded-md"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
 
           <div className="grid grid-cols-3 gap-4">
