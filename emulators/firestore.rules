@@ -321,5 +321,17 @@ service cloud.firestore {
     match /stripeEvents/{eventId} {
       allow read, write: if false; // Functions only
     }
+
+    // =========================================================================
+    // Mortgages (Global collection - Super-admin only)
+    // =========================================================================
+
+    match /mortgages/{mortgageId} {
+      allow read, write: if isSuperAdmin();
+
+      match /payments/{paymentId} {
+        allow read, write: if isSuperAdmin();
+      }
+    }
   }
 }

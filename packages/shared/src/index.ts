@@ -11,6 +11,7 @@ export * from './types/accounting';
 export * from './types/rbac';
 export * from './types/workOrder';
 export * from './types/globalTask';
+export * from './types/mortgage';
 
 // Constants
 export * from './constants/roles';
@@ -25,6 +26,7 @@ export * from './validators/lease';
 export * from './validators/legal';
 export * from './validators/payments';
 export * from './validators/rbac';
+export * from './validators/mortgage';
 
 // Utils
 export * from './utils/ids';

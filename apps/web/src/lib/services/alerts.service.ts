@@ -1,6 +1,6 @@
 import { adminDb } from '@/lib/firebase/admin';
 
-export type AlertType = 'lease_expiring' | 'charge_overdue' | 'payment_due' | 'case_hearing' | 'task_due';
+export type AlertType = 'lease_expiring' | 'charge_overdue' | 'payment_due' | 'case_hearing' | 'task_due' | 'mortgage_payment_due';
 export type AlertSeverity = 'warning' | 'critical';
 
 export interface Alert {
@@ -214,22 +214,79 @@ async function getLlcAlerts(llcId: string, llcName: string): Promise<Alert[]> {
 }
 
 /**
+ * Check if user is a super-admin
+ */
+async function isSuperAdmin(userId: string): Promise<boolean> {
+  const userDoc = await adminDb.collection('users').doc(userId).get();
+  return userDoc.exists && userDoc.data()?.isSuperAdmin === true;
+}
+
+/**
+ * Get mortgage payment alerts (super-admin only)
+ */
+async function getMortgageAlerts(): Promise<Alert[]> {
+  const alerts: Alert[] = [];
+  const today = new Date();
+  const fiveDaysFromNow = new Date();
+  fiveDaysFromNow.setDate(today.getDate() + 5);
+  const futureDateStr = fiveDaysFromNow.toISOString().slice(0, 10);
+
+  const mortgagesSnap = await adminDb
+    .collection('mortgages')
+    .where('status', '==', 'active')
+    .where('nextPaymentDate', '<=', futureDateStr)
+    .get();
+
+  for (const doc of mortgagesSnap.docs) {
+    const mortgage = doc.data();
+    const daysUntil = Math.ceil(
+      (new Date(mortgage.nextPaymentDate).getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+    );
+
+    // Format amount for display
+    const amount = mortgage.totalPayment || 0;
+    const formattedAmount = '$' + (amount / 100).toLocaleString(undefined, { minimumFractionDigits: 2 });
+
+    alerts.push({
+      id: `mortgage-${doc.id}`,
+      type: 'mortgage_payment_due',
+      severity: daysUntil <= 2 ? 'critical' : 'warning',
+      title: daysUntil <= 0 ? 'Mortgage Payment Due TODAY' : `Mortgage Payment Due in ${daysUntil} days`,
+      description: `${mortgage.propertyAddress} - ${formattedAmount} to ${mortgage.lender}`,
+      llcId: mortgage.llcId,
+      llcName: mortgage.llcName,
+      entityType: 'mortgage',
+      entityId: doc.id,
+      dueDate: mortgage.nextPaymentDate,
+      amount: mortgage.totalPayment,
+    });
+  }
+
+  return alerts;
+}
+
+/**
  * Get all alerts across all user's LLCs
  */
 export async function getOwnerAlerts(userId: string): Promise<Alert[]> {
   const userLlcs = await getUserLlcs(userId);
+  const allAlerts: Alert[] = [];
 
-  if (userLlcs.length === 0) {
-    return [];
+  // Fetch LLC alerts if user has access to any LLCs
+  if (userLlcs.length > 0) {
+    const alertPromises = userLlcs.map(llc => getLlcAlerts(llc.id, llc.legalName));
+    const alertArrays = await Promise.all(alertPromises);
+    allAlerts.push(...alertArrays.flat());
   }
 
-  // Fetch alerts for all LLCs in parallel
-  const alertPromises = userLlcs.map(llc => getLlcAlerts(llc.id, llc.legalName));
-  const alertArrays = await Promise.all(alertPromises);
+  // Fetch mortgage alerts for super-admins
+  const superAdmin = await isSuperAdmin(userId);
+  if (superAdmin) {
+    const mortgageAlerts = await getMortgageAlerts();
+    allAlerts.push(...mortgageAlerts);
+  }
 
-  // Flatten and sort by severity (critical first) then by due date
-  const allAlerts = alertArrays.flat();
-
+  // Sort by severity (critical first) then by due date
   allAlerts.sort((a, b) => {
     // Critical first
     if (a.severity === 'critical' && b.severity !== 'critical') return -1;
