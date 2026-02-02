@@ -204,7 +204,7 @@ export default function NewMortgagePage() {
   }
 
   function getPropertyLabel(property: Property): string {
-    return property.name || `${property.address.street1}, ${property.address.city}`;
+    return `${property.name} - ${property.address.street1}, ${property.address.city}`;
   }
 
   return (
