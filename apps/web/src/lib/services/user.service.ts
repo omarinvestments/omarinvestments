@@ -36,17 +36,25 @@ export async function getOrCreateUser(
   const authUser = await adminAuth.getUser(userId);
 
   const now = FieldValue.serverTimestamp();
-  const userData = {
+  const userData: Record<string, unknown> = {
     email: authUser.email || '',
-    displayName: authUser.displayName || undefined,
-    phoneNumber: authUser.phoneNumber || undefined,
-    photoURL: authUser.photoURL || undefined,
     userType: options?.userType || 'tenant' as UserType,
     status: 'active' as UserStatus,
     isSuperAdmin: false,
     tenantLinks: options?.tenantLinks || [],
     createdAt: now,
   };
+
+  // Only add optional fields if they have values (Firestore doesn't accept undefined)
+  if (authUser.displayName) {
+    userData.displayName = authUser.displayName;
+  }
+  if (authUser.phoneNumber) {
+    userData.phoneNumber = authUser.phoneNumber;
+  }
+  if (authUser.photoURL) {
+    userData.photoURL = authUser.photoURL;
+  }
 
   await adminDb.collection(COLLECTION).doc(userId).set(userData);
 
@@ -272,13 +280,21 @@ export async function syncFromAuth(userId: string): Promise<User> {
   const authUser = await adminAuth.getUser(userId);
   const existing = await getUser(userId);
 
-  const updates = {
+  const updates: Record<string, unknown> = {
     email: authUser.email || '',
-    displayName: authUser.displayName || undefined,
-    phoneNumber: authUser.phoneNumber || undefined,
-    photoURL: authUser.photoURL || undefined,
     updatedAt: FieldValue.serverTimestamp(),
   };
+
+  // Only add optional fields if they have values (Firestore doesn't accept undefined)
+  if (authUser.displayName) {
+    updates.displayName = authUser.displayName;
+  }
+  if (authUser.phoneNumber) {
+    updates.phoneNumber = authUser.phoneNumber;
+  }
+  if (authUser.photoURL) {
+    updates.photoURL = authUser.photoURL;
+  }
 
   if (existing) {
     await adminDb.collection(COLLECTION).doc(userId).update(updates);

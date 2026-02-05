@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { PlatformUser, UserAssignment } from '@shared/types';
@@ -9,7 +9,7 @@ interface UserWithAssignments extends PlatformUser {
   assignments?: UserAssignment[];
 }
 
-export default function AdminUsersPage() {
+function AdminUsersContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [users, setUsers] = useState<UserWithAssignments[]>([]);
@@ -19,6 +19,7 @@ export default function AdminUsersPage() {
 
   const superAdminsOnly = searchParams.get('superAdminsOnly') === 'true';
   const filter = searchParams.get('filter');
+  const created = searchParams.get('created');
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -125,6 +126,12 @@ export default function AdminUsersPage() {
           <span className="text-sm text-muted-foreground mx-2">/</span>
           <h1 className="text-2xl font-bold inline">Users</h1>
         </div>
+        <Link
+          href="/admin/staff/new"
+          className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:opacity-90"
+        >
+          Add Staff
+        </Link>
       </div>
 
       {/* Filters */}
@@ -170,6 +177,13 @@ export default function AdminUsersPage() {
           Employees
         </Link>
       </div>
+
+      {/* Success message */}
+      {created === 'staff' && (
+        <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded-md text-sm">
+          Staff member created successfully. They can now activate their account at /activate using their date of birth and SSN.
+        </div>
+      )}
 
       {/* Search */}
       <form onSubmit={handleSearch} className="mb-6">
@@ -262,5 +276,13 @@ export default function AdminUsersPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function AdminUsersPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-muted-foreground">Loading...</div>}>
+      <AdminUsersContent />
+    </Suspense>
   );
 }

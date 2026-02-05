@@ -1,13 +1,14 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import { AuthProvider } from '@/lib/auth/AuthContext';
+import { RoleProvider } from '@/lib/contexts/RoleContext';
 import '@/styles/globals.css';
 
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Property Platform',
-  description: 'Internal property management platform',
+  title: 'O.I. Properties',
+  description: 'Property management platform',
 };
 
 export default function RootLayout({
@@ -18,7 +19,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <RoleProvider>{children}</RoleProvider>
+        </AuthProvider>
       </body>
     </html>
   );

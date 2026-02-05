@@ -76,6 +76,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     // Clear session cookie
     await fetch('/api/auth/session', { method: 'DELETE' });
+    // Clear active role cookie
+    document.cookie = '__active_role=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';
     // Sign out of Firebase
     await firebaseSignOut(auth);
   };

@@ -30,6 +30,7 @@ export default function NewTenantPage({ params }: NewTenantPageProps) {
 
   // Residential fields
   const [firstName, setFirstName] = useState('');
+  const [middleInitial, setMiddleInitial] = useState('');
   const [lastName, setLastName] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [ssn4, setSsn4] = useState('');
@@ -81,11 +82,12 @@ export default function NewTenantPage({ params }: NewTenantPageProps) {
           type: 'residential',
           propertyId,
           firstName,
+          middleInitial: middleInitial || undefined,
           lastName,
           email,
           phone: phone || undefined,
-          dateOfBirth: dateOfBirth || undefined,
-          ssn4: ssn4 || undefined,
+          dateOfBirth,
+          ssn4,
           emergencyContact: ecName
             ? { name: ecName, relationship: ecRelationship, phone: ecPhone }
             : undefined,
@@ -98,7 +100,7 @@ export default function NewTenantPage({ params }: NewTenantPageProps) {
           businessName,
           dba: dba || undefined,
           businessType,
-          einLast4: einLast4 || undefined,
+          einLast4,
           stateOfIncorporation: stateOfIncorporation || undefined,
           primaryContact: { name: pcName, title: pcTitle || undefined, email: pcEmail || undefined, phone: pcPhone || undefined },
           email,
@@ -116,7 +118,7 @@ export default function NewTenantPage({ params }: NewTenantPageProps) {
       const data = await res.json();
 
       if (data.ok) {
-        router.push(`/llcs/${llcId}/tenants`);
+        router.push(`/llcs/${llcId}/tenants?created=true`);
       } else {
         setError(data.error?.message || 'Failed to create tenant');
       }
@@ -202,8 +204,8 @@ export default function NewTenantPage({ params }: NewTenantPageProps) {
           <div className="space-y-4">
             <h2 className="text-lg font-medium">Personal Information</h2>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
+            <div className="grid grid-cols-6 gap-4">
+              <div className="col-span-2">
                 <label htmlFor="firstName" className="block text-sm font-medium mb-2">
                   First Name *
                 </label>
@@ -216,7 +218,20 @@ export default function NewTenantPage({ params }: NewTenantPageProps) {
                   className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
-              <div>
+              <div className="col-span-1">
+                <label htmlFor="middleInitial" className="block text-sm font-medium mb-2">
+                  M.I.
+                </label>
+                <input
+                  id="middleInitial"
+                  type="text"
+                  value={middleInitial}
+                  onChange={(e) => setMiddleInitial(e.target.value.slice(0, 1).toUpperCase())}
+                  maxLength={1}
+                  className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring text-center"
+                />
+              </div>
+              <div className="col-span-3">
                 <label htmlFor="lastName" className="block text-sm font-medium mb-2">
                   Last Name *
                 </label>
@@ -234,19 +249,20 @@ export default function NewTenantPage({ params }: NewTenantPageProps) {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label htmlFor="dateOfBirth" className="block text-sm font-medium mb-2">
-                  Date of Birth
+                  Date of Birth *
                 </label>
                 <input
                   id="dateOfBirth"
                   type="date"
                   value={dateOfBirth}
                   onChange={(e) => setDateOfBirth(e.target.value)}
+                  required
                   className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
               <div>
                 <label htmlFor="ssn4" className="block text-sm font-medium mb-2">
-                  SSN (last 4)
+                  SSN (last 4) *
                 </label>
                 <input
                   id="ssn4"
@@ -254,11 +270,16 @@ export default function NewTenantPage({ params }: NewTenantPageProps) {
                   value={ssn4}
                   onChange={(e) => setSsn4(e.target.value.replace(/\D/g, '').slice(0, 4))}
                   maxLength={4}
+                  required
+                  pattern="\d{4}"
                   className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
                   placeholder="1234"
                 />
               </div>
             </div>
+            <p className="text-xs text-muted-foreground">
+              Date of birth and SSN are required for tenant account activation.
+            </p>
 
             {/* Emergency Contact */}
             <div className="space-y-4 pt-2">
@@ -353,7 +374,7 @@ export default function NewTenantPage({ params }: NewTenantPageProps) {
               </div>
               <div>
                 <label htmlFor="einLast4" className="block text-sm font-medium mb-2">
-                  EIN (last 4)
+                  EIN (last 4) *
                 </label>
                 <input
                   id="einLast4"
@@ -361,6 +382,8 @@ export default function NewTenantPage({ params }: NewTenantPageProps) {
                   value={einLast4}
                   onChange={(e) => setEinLast4(e.target.value.replace(/\D/g, '').slice(0, 4))}
                   maxLength={4}
+                  required
+                  pattern="\d{4}"
                   className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>

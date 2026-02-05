@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth/requireUser';
 import { createTenant, listAllTenants } from '@/lib/services/tenant.service';
+import { createActivation } from '@/lib/services/activation.service';
 import { createTenantSchema } from '@shared/types';
 
 /**
@@ -64,6 +65,42 @@ export async function POST(request: NextRequest) {
     }
 
     const tenant = await createTenant(parsed.data, user.uid);
+
+    // Create pending activation for account activation
+    try {
+      if (tenant.type === 'residential') {
+        if (tenant.dateOfBirth && tenant.ssn4) {
+          await createActivation({
+            type: 'residential',
+            role: 'tenant',
+            firstName: tenant.firstName,
+            middleInitial: tenant.middleInitial || undefined,
+            lastName: tenant.lastName,
+            dateOfBirth: tenant.dateOfBirth,
+            ssn4: tenant.ssn4,
+            llcIds: [],
+            tenantId: tenant.id,
+          }, user.uid);
+        }
+      } else {
+        if (tenant.einLast4 && tenant.businessName) {
+          await createActivation({
+            type: 'commercial',
+            role: 'tenant',
+            firstName: tenant.primaryContact.name.split(' ')[0] || tenant.businessName,
+            lastName: tenant.primaryContact.name.split(' ').slice(1).join(' ') || '',
+            dateOfBirth: '1900-01-01', // Commercial entities use EIN/business name for verification
+            einLast4: tenant.einLast4,
+            businessName: tenant.businessName,
+            llcIds: [],
+            tenantId: tenant.id,
+          }, user.uid);
+        }
+      }
+    } catch (activationError) {
+      // Log but don't fail the tenant creation
+      console.error('Failed to create activation for tenant:', activationError);
+    }
 
     return NextResponse.json({ ok: true, data: tenant }, { status: 201 });
   } catch (error) {

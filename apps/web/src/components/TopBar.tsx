@@ -3,11 +3,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth/AuthContext';
+import { useRole } from '@/lib/contexts/RoleContext';
 import { useRouter } from 'next/navigation';
 import GlobalSearch from './GlobalSearch';
 
 export default function TopBar() {
   const { user, signOut } = useAuth();
+  const { hasTenantRole, clearActiveRole } = useRole();
   const router = useRouter();
   const [invitationCount, setInvitationCount] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -45,7 +47,12 @@ export default function TopBar() {
 
   const handleSignOut = async () => {
     await signOut();
-    router.push('/login');
+    router.push('/');
+  };
+
+  const handleSwitchToTenant = () => {
+    clearActiveRole();
+    router.push('/');
   };
 
   const closeSearch = useCallback(() => setSearchOpen(false), []);
@@ -56,7 +63,7 @@ export default function TopBar() {
         <div className="flex items-center justify-between px-6 py-3">
           <div className="flex items-center gap-4">
             <Link href="/llcs" className="text-lg font-semibold hover:opacity-80 transition-opacity">
-              Property Platform
+              O.I. Properties
             </Link>
           </div>
 
@@ -96,6 +103,14 @@ export default function TopBar() {
                 </span>
               )}
             </Link>
+            {hasTenantRole && (
+              <button
+                onClick={handleSwitchToTenant}
+                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Switch to Tenant
+              </button>
+            )}
             <span className="text-sm text-muted-foreground">{user?.email}</span>
             <button
               onClick={handleSignOut}

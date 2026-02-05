@@ -40,6 +40,7 @@ export interface BaseTenant {
 export interface ResidentialTenant extends BaseTenant {
   type: 'residential';
   firstName: string;
+  middleInitial?: string;
   lastName: string;
   dateOfBirth?: string; // ISO date string
   ssn4?: string; // Last 4 digits only

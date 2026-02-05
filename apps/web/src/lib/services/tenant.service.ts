@@ -4,6 +4,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 export interface CreateResidentialTenantInput {
   type: 'residential';
   firstName: string;
+  middleInitial?: string;
   lastName: string;
   email: string;
   phone?: string;
@@ -75,17 +76,46 @@ export interface UpdateTenantInput {
   };
 }
 
+export interface CreatedResidentialTenant {
+  id: string;
+  type: 'residential';
+  email: string;
+  phone: string | null;
+  notes: string | null;
+  firstName: string;
+  lastName: string;
+  middleInitial: string | null;
+  dateOfBirth: string | null;
+  ssn4: string | null;
+  emergencyContact: { name: string; relationship: string; phone: string } | null;
+}
+
+export interface CreatedCommercialTenant {
+  id: string;
+  type: 'commercial';
+  email: string;
+  phone: string | null;
+  notes: string | null;
+  businessName: string;
+  dba: string | null;
+  businessType: string;
+  einLast4: string | null;
+  stateOfIncorporation: string | null;
+  primaryContact: { name: string; title?: string; email?: string; phone?: string };
+}
+
+export type CreatedTenant = CreatedResidentialTenant | CreatedCommercialTenant;
+
 /**
  * Create a new global tenant
  */
 export async function createTenant(
   input: CreateTenantInput,
   actorUserId: string
-) {
+): Promise<CreatedTenant> {
   const tenantRef = adminDb.collection('tenants').doc();
 
   const baseTenantData = {
-    type: input.type,
     email: input.email,
     phone: input.phone || null,
     notes: input.notes || null,
@@ -96,20 +126,23 @@ export async function createTenant(
     updates: [],
   };
 
-  let tenantData: Record<string, unknown>;
-
   if (input.type === 'residential') {
-    tenantData = {
+    const tenantData = {
       ...baseTenantData,
+      type: 'residential' as const,
       firstName: input.firstName,
+      middleInitial: input.middleInitial || null,
       lastName: input.lastName,
       dateOfBirth: input.dateOfBirth || null,
       ssn4: input.ssn4 || null,
       emergencyContact: input.emergencyContact || null,
     };
+    await tenantRef.set(tenantData);
+    return { id: tenantRef.id, ...tenantData };
   } else {
-    tenantData = {
+    const tenantData = {
       ...baseTenantData,
+      type: 'commercial' as const,
       businessName: input.businessName,
       dba: input.dba || null,
       businessType: input.businessType,
@@ -117,10 +150,9 @@ export async function createTenant(
       stateOfIncorporation: input.stateOfIncorporation || null,
       primaryContact: input.primaryContact,
     };
+    await tenantRef.set(tenantData);
+    return { id: tenantRef.id, ...tenantData };
   }
-
-  await tenantRef.set(tenantData);
-  return { id: tenantRef.id, ...tenantData };
 }
 
 /**
@@ -163,8 +195,9 @@ export async function updateTenant(
   }
 
   // Add update record to the updates array
+  // Note: Can't use serverTimestamp() inside arrayUnion, so use ISO string
   const updateRecord = {
-    updatedAt: FieldValue.serverTimestamp(),
+    updatedAt: new Date().toISOString(),
     updatedBy: actorUserId,
   };
 

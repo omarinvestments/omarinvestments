@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, Suspense } from 'react';
 import Link from 'next/link';
 import { use } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   SearchFilter,
   TENANT_FILTERS,
@@ -37,8 +38,9 @@ function getTenantDisplayName(tenant: TenantItem): string {
   return `${tenant.firstName} ${tenant.lastName}`;
 }
 
-export default function TenantsPage({ params }: TenantsPageProps) {
-  const { llcId } = use(params);
+function TenantsContent({ llcId }: { llcId: string }) {
+  const searchParams = useSearchParams();
+  const created = searchParams.get('created') === 'true';
   const [tenants, setTenants] = useState<TenantItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -142,6 +144,13 @@ export default function TenantsPage({ params }: TenantsPageProps) {
         </Link>
       </div>
 
+      {/* Success message */}
+      {created && (
+        <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded-md text-sm">
+          Tenant created successfully. They can activate their account at /activate using their date of birth and SSN (or EIN for commercial).
+        </div>
+      )}
+
       {/* Search & Filters */}
       <SearchFilter
         filters={TENANT_FILTERS}
@@ -241,5 +250,15 @@ export default function TenantsPage({ params }: TenantsPageProps) {
         </div>
       )}
     </div>
+  );
+}
+
+export default function TenantsPage({ params }: TenantsPageProps) {
+  const { llcId } = use(params);
+
+  return (
+    <Suspense fallback={<div className="text-muted-foreground">Loading tenants...</div>}>
+      <TenantsContent llcId={llcId} />
+    </Suspense>
   );
 }

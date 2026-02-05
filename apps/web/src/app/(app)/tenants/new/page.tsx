@@ -13,6 +13,7 @@ export default function NewTenantPage() {
 
   // Residential fields
   const [firstName, setFirstName] = useState('');
+  const [middleInitial, setMiddleInitial] = useState('');
   const [lastName, setLastName] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [ssn4, setSsn4] = useState('');
@@ -50,6 +51,7 @@ export default function NewTenantPage() {
       body = {
         type: 'residential',
         firstName,
+        middleInitial: middleInitial || undefined,
         lastName,
         email,
         phone: phone || undefined,
@@ -153,8 +155,8 @@ export default function NewTenantPage() {
         {tenantType === 'residential' && (
           <div className="space-y-4 p-4 border rounded-lg">
             <h2 className="font-medium">Personal Information</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
+            <div className="grid grid-cols-6 gap-4">
+              <div className="col-span-2">
                 <label htmlFor="firstName" className="block text-sm font-medium mb-2">
                   First Name *
                 </label>
@@ -167,7 +169,20 @@ export default function NewTenantPage() {
                   className="w-full px-3 py-2 border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
-              <div>
+              <div className="col-span-1">
+                <label htmlFor="middleInitial" className="block text-sm font-medium mb-2">
+                  M.I.
+                </label>
+                <input
+                  id="middleInitial"
+                  type="text"
+                  value={middleInitial}
+                  onChange={(e) => setMiddleInitial(e.target.value.slice(0, 1).toUpperCase())}
+                  maxLength={1}
+                  className="w-full px-3 py-2 border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring text-center"
+                />
+              </div>
+              <div className="col-span-3">
                 <label htmlFor="lastName" className="block text-sm font-medium mb-2">
                   Last Name *
                 </label>
