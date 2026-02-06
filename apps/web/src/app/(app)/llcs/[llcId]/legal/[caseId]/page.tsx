@@ -1343,7 +1343,7 @@ export default function CaseDetailPage({ params }: CaseDetailPageProps) {
             <div className="space-y-4 text-sm">
               {caseData.nextHearingDate && (
                 <div className="flex gap-3">
-                  <div className="w-2 h-2 mt-1.5 rounded-full bg-yellow-500"></div>
+                  <div className="w-2 h-2 mt-1.5 rounded-full bg-yellow-400"></div>
                   <div>
                     <p className="font-medium">Next Hearing</p>
                     <p className="text-muted-foreground">{formatDate(caseData.nextHearingDate)}</p>
