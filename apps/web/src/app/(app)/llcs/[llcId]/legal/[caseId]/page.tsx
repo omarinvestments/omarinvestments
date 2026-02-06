@@ -13,6 +13,24 @@ interface CaseResolution {
   notes?: string;
 }
 
+interface OpposingPartyData {
+  type: 'tenant' | 'other';
+  tenantId?: string;
+  tenantName?: string;
+  propertyAddress?: string;
+  email?: string;
+  phone?: string;
+  name?: string;
+}
+
+interface CounselData {
+  name: string;
+  email?: string;
+  phone?: string;
+  firmName?: string;
+  address?: string;
+}
+
 interface CaseData {
   id: string;
   court: string;
@@ -27,23 +45,9 @@ interface CaseData {
     llcId?: string;
     llcName?: string;
   };
-  opposingParty?: {
-    type: 'tenant' | 'other';
-    tenantId?: string;
-    tenantName?: string;
-    propertyAddress?: string;
-    email?: string;
-    phone?: string;
-    name?: string;
-  };
-  opposingCounsel?: {
-    name: string;
-    email?: string;
-    phone?: string;
-    firmName?: string;
-    address?: string;
-  };
-  ourCounsel?: string;
+  opposingParty?: OpposingPartyData[] | OpposingPartyData;
+  opposingCounsel?: CounselData[] | CounselData;
+  ourCounsel?: CounselData[] | CounselData | string;
   caseManagers: string[];
   filingDate?: string;
   nextHearingDate?: string;
@@ -212,6 +216,25 @@ function getDaysUntil(dateStr: string): number {
   const date = new Date(dateStr);
   const now = new Date();
   return Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function normalizeOpposingParty(val: OpposingPartyData[] | OpposingPartyData | undefined): OpposingPartyData[] {
+  if (!val) return [];
+  if (Array.isArray(val)) return val;
+  return [val];
+}
+
+function normalizeOpposingCounsel(val: CounselData[] | CounselData | undefined): CounselData[] {
+  if (!val) return [];
+  if (Array.isArray(val)) return val;
+  return [val];
+}
+
+function normalizeOurCounsel(val: CounselData[] | CounselData | string | undefined): CounselData[] {
+  if (!val) return [];
+  if (typeof val === 'string') return val ? [{ name: val }] : [];
+  if (Array.isArray(val)) return val;
+  return [val];
 }
 
 interface CaseDetailPageProps {
@@ -691,20 +714,24 @@ export default function CaseDetailPage({ params }: CaseDetailPageProps) {
                 )}
               </div>
 
-              {/* Opposing Party */}
+              {/* Opposing Parties */}
               <div>
-                <h3 className="text-sm text-muted-foreground mb-2">Opposing Party</h3>
-                {caseData.opposingParty ? (
-                  <div className="p-3 bg-secondary/30 rounded-md">
-                    <p className="font-medium">
-                      {caseData.opposingParty.type === 'tenant' ? caseData.opposingParty.tenantName : caseData.opposingParty.name}
-                    </p>
-                    {caseData.opposingParty.propertyAddress && (
-                      <p className="text-xs text-muted-foreground">{caseData.opposingParty.propertyAddress}</p>
-                    )}
-                    {caseData.opposingParty.email && (
-                      <p className="text-xs text-muted-foreground">{caseData.opposingParty.email}</p>
-                    )}
+                <h3 className="text-sm text-muted-foreground mb-2">Opposing {normalizeOpposingParty(caseData.opposingParty).length === 1 ? 'Party' : 'Parties'}</h3>
+                {normalizeOpposingParty(caseData.opposingParty).length > 0 ? (
+                  <div className="space-y-2">
+                    {normalizeOpposingParty(caseData.opposingParty).map((op, idx) => (
+                      <div key={idx} className="p-3 bg-secondary/30 rounded-md">
+                        <p className="font-medium">
+                          {op.type === 'tenant' ? op.tenantName : op.name}
+                        </p>
+                        {op.propertyAddress && (
+                          <p className="text-xs text-muted-foreground">{op.propertyAddress}</p>
+                        )}
+                        {op.email && (
+                          <p className="text-xs text-muted-foreground">{op.email}</p>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">Not specified</p>
@@ -720,8 +747,23 @@ export default function CaseDetailPage({ params }: CaseDetailPageProps) {
               {/* Our Counsel */}
               <div>
                 <h3 className="text-sm text-muted-foreground mb-2">Our Counsel</h3>
-                {caseData.ourCounsel ? (
-                  <p className="font-medium">{caseData.ourCounsel}</p>
+                {normalizeOurCounsel(caseData.ourCounsel).length > 0 ? (
+                  <div className="space-y-2">
+                    {normalizeOurCounsel(caseData.ourCounsel).map((c, idx) => (
+                      <div key={idx} className="space-y-1">
+                        <p className="font-medium">{c.name}</p>
+                        {c.firmName && (
+                          <p className="text-sm text-muted-foreground">{c.firmName}</p>
+                        )}
+                        {c.email && (
+                          <p className="text-sm text-muted-foreground">{c.email}</p>
+                        )}
+                        {c.phone && (
+                          <p className="text-sm text-muted-foreground">{c.phone}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">Not specified</p>
                 )}
@@ -730,18 +772,22 @@ export default function CaseDetailPage({ params }: CaseDetailPageProps) {
               {/* Opposing Counsel */}
               <div>
                 <h3 className="text-sm text-muted-foreground mb-2">Opposing Counsel</h3>
-                {caseData.opposingCounsel ? (
-                  <div className="space-y-1">
-                    <p className="font-medium">{caseData.opposingCounsel.name}</p>
-                    {caseData.opposingCounsel.firmName && (
-                      <p className="text-sm text-muted-foreground">{caseData.opposingCounsel.firmName}</p>
-                    )}
-                    {caseData.opposingCounsel.email && (
-                      <p className="text-sm text-muted-foreground">{caseData.opposingCounsel.email}</p>
-                    )}
-                    {caseData.opposingCounsel.phone && (
-                      <p className="text-sm text-muted-foreground">{caseData.opposingCounsel.phone}</p>
-                    )}
+                {normalizeOpposingCounsel(caseData.opposingCounsel).length > 0 ? (
+                  <div className="space-y-2">
+                    {normalizeOpposingCounsel(caseData.opposingCounsel).map((c, idx) => (
+                      <div key={idx} className="space-y-1">
+                        <p className="font-medium">{c.name}</p>
+                        {c.firmName && (
+                          <p className="text-sm text-muted-foreground">{c.firmName}</p>
+                        )}
+                        {c.email && (
+                          <p className="text-sm text-muted-foreground">{c.email}</p>
+                        )}
+                        {c.phone && (
+                          <p className="text-sm text-muted-foreground">{c.phone}</p>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">Not specified</p>
@@ -837,7 +883,7 @@ export default function CaseDetailPage({ params }: CaseDetailPageProps) {
                     <div>
                       <label className="block text-xs font-medium mb-1">Time</label>
                       <input
-                        type="text"
+                        type="time"
                         value={courtDateTime}
                         onChange={(e) => setCourtDateTime(e.target.value)}
                         placeholder="9:00 AM"
@@ -865,12 +911,16 @@ export default function CaseDetailPage({ params }: CaseDetailPageProps) {
                   </div>
                   <div>
                     <label className="block text-xs font-medium mb-1">Description</label>
-                    <input
-                      type="text"
+                    <textarea
                       value={courtDateDescription}
-                      onChange={(e) => setCourtDateDescription(e.target.value)}
+                      onChange={(e) => {
+                        setCourtDateDescription(e.target.value)
+                        e.target.style.height = 'auto';
+                        e.target.style.height = `${e.target.scrollHeight}px`;
+                      }}
                       placeholder="What this appearance is for..."
-                      className="w-full px-2 py-1.5 border rounded text-sm bg-background"
+                      rows={1}
+                      className="w-full px-2 py-1.5 border rounded text-sm bg-background resize-none overflow-hidden"
                     />
                   </div>
 

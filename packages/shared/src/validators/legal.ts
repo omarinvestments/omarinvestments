@@ -65,6 +65,14 @@ export const opposingCounselSchema = z.object({
   address: z.string().max(500).optional(),
 });
 
+export const ourCounselSchema = z.object({
+  name: z.string().min(1).max(200),
+  email: z.string().email().optional(),
+  phone: z.string().max(20).optional(),
+  firmName: z.string().max(200).optional(),
+  address: z.string().max(500).optional(),
+});
+
 // Forward reference for caseResolutionSchema (defined below)
 const caseResolutionSchemaForCase = z.object({
   type: z.enum([
@@ -93,9 +101,9 @@ export const createCaseSchema = z.object({
   status: caseStatusSchema.default('open'),
   visibility: caseVisibilitySchema.default('llcWide'),
   plaintiff: plaintiffSchema.optional(),
-  opposingParty: opposingPartySchema.optional(),
-  opposingCounsel: opposingCounselSchema.optional(),
-  ourCounsel: z.string().max(200).optional(),
+  opposingParty: z.array(opposingPartySchema).optional(),
+  opposingCounsel: z.array(opposingCounselSchema).optional(),
+  ourCounsel: z.array(ourCounselSchema).optional(),
   caseManagers: z.array(z.string()).default([]),
   filingDate: z.string().datetime().optional(),
   nextHearingDate: z.string().datetime().optional(),

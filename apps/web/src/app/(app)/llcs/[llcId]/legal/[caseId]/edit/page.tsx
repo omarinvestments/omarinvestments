@@ -23,7 +23,7 @@ interface OpposingPartyData {
   name?: string;
 }
 
-interface OpposingCounselData {
+interface CounselData {
   name: string;
   email?: string;
   phone?: string;
@@ -48,9 +48,9 @@ interface CaseDetail {
   status: string;
   visibility: string;
   plaintiff?: PlaintiffData;
-  opposingParty?: OpposingPartyData;
-  opposingCounsel?: OpposingCounselData;
-  ourCounsel?: string;
+  opposingParty?: OpposingPartyData[] | OpposingPartyData;
+  opposingCounsel?: CounselData[] | CounselData;
+  ourCounsel?: CounselData[] | CounselData | string;
   caseManagers: string[];
   filingDate?: string;
   nextHearingDate?: string;
@@ -87,6 +87,21 @@ interface MemberOption {
   email: string;
   displayName: string | null;
   role: string;
+}
+
+interface CounselEntry {
+  name: string;
+  email: string;
+  phone: string;
+  firmName: string;
+  address: string;
+}
+
+interface OpposingPartyEntry {
+  type: 'tenant' | 'other';
+  tenantId: string;
+  name: string;
+  tenantSearch: string;
 }
 
 interface CaseEditPageProps {
@@ -136,6 +151,29 @@ function getTenantDisplayName(t: TenantOption): string {
   return `${t.firstName || ''} ${t.lastName || ''}`.trim() || 'Unknown';
 }
 
+const emptyCounsel = (): CounselEntry => ({ name: '', email: '', phone: '', firmName: '', address: '' });
+const emptyOpposingParty = (): OpposingPartyEntry => ({ type: 'other', tenantId: '', name: '', tenantSearch: '' });
+
+// Normalize data from Firestore: single object -> array, handle old string format for ourCounsel
+function normalizeOpposingParty(val: OpposingPartyData[] | OpposingPartyData | undefined): OpposingPartyData[] {
+  if (!val) return [];
+  if (Array.isArray(val)) return val;
+  return [val];
+}
+
+function normalizeOpposingCounsel(val: CounselData[] | CounselData | undefined): CounselData[] {
+  if (!val) return [];
+  if (Array.isArray(val)) return val;
+  return [val];
+}
+
+function normalizeOurCounsel(val: CounselData[] | CounselData | string | undefined): CounselData[] {
+  if (!val) return [];
+  if (typeof val === 'string') return val ? [{ name: val }] : [];
+  if (Array.isArray(val)) return val;
+  return [val];
+}
+
 export default function CaseEditPage({ params }: CaseEditPageProps) {
   const { llcId, caseId } = use(params);
   const router = useRouter();
@@ -164,21 +202,16 @@ export default function CaseEditPage({ params }: CaseEditPageProps) {
   const [plaintiffName, setPlaintiffName] = useState('');
   const [plaintiffLlcId, setPlaintiffLlcId] = useState('');
 
-  // Opposing Party
-  const [opposingPartyType, setOpposingPartyType] = useState<'tenant' | 'other'>('other');
-  const [opposingPartyTenantId, setOpposingPartyTenantId] = useState('');
-  const [opposingPartyName, setOpposingPartyName] = useState('');
-  const [tenantSearch, setTenantSearch] = useState('');
+  // Opposing Parties (array)
+  const [opposingParties, setOpposingParties] = useState<OpposingPartyEntry[]>([]);
 
-  // Opposing Counsel
-  const [ocName, setOcName] = useState('');
-  const [ocEmail, setOcEmail] = useState('');
-  const [ocPhone, setOcPhone] = useState('');
-  const [ocFirmName, setOcFirmName] = useState('');
-  const [ocAddress, setOcAddress] = useState('');
+  // Opposing Counsel (array)
+  const [opposingCounsels, setOpposingCounsels] = useState<CounselEntry[]>([]);
+
+  // Our Counsel (array)
+  const [ourCounsels, setOurCounsels] = useState<CounselEntry[]>([]);
 
   // Case Management
-  const [ourCounsel, setOurCounsel] = useState('');
   const [caseManagers, setCaseManagers] = useState<string[]>([]);
   const [visibility, setVisibility] = useState('');
 
@@ -213,26 +246,35 @@ export default function CaseEditPage({ params }: CaseEditPageProps) {
       }
     }
 
-    // Opposing Party
-    if (c.opposingParty) {
-      setOpposingPartyType(c.opposingParty.type);
-      if (c.opposingParty.type === 'tenant') {
-        setOpposingPartyTenantId(c.opposingParty.tenantId || '');
-      } else {
-        setOpposingPartyName(c.opposingParty.name || '');
-      }
-    }
+    // Opposing Parties - normalize from single or array
+    const opArr = normalizeOpposingParty(c.opposingParty);
+    setOpposingParties(opArr.map((op) => ({
+      type: op.type,
+      tenantId: op.type === 'tenant' ? (op.tenantId || '') : '',
+      name: op.type === 'other' ? (op.name || '') : '',
+      tenantSearch: '',
+    })));
 
-    // Opposing Counsel
-    if (c.opposingCounsel) {
-      setOcName(c.opposingCounsel.name || '');
-      setOcEmail(c.opposingCounsel.email || '');
-      setOcPhone(c.opposingCounsel.phone || '');
-      setOcFirmName(c.opposingCounsel.firmName || '');
-      setOcAddress(c.opposingCounsel.address || '');
-    }
+    // Opposing Counsel - normalize from single or array
+    const ocArr = normalizeOpposingCounsel(c.opposingCounsel);
+    setOpposingCounsels(ocArr.map((oc) => ({
+      name: oc.name || '',
+      email: oc.email || '',
+      phone: oc.phone || '',
+      firmName: oc.firmName || '',
+      address: oc.address || '',
+    })));
 
-    setOurCounsel(c.ourCounsel || '');
+    // Our Counsel - normalize from string, single object, or array
+    const ourArr = normalizeOurCounsel(c.ourCounsel);
+    setOurCounsels(ourArr.map((oc) => ({
+      name: oc.name || '',
+      email: oc.email || '',
+      phone: oc.phone || '',
+      firmName: oc.firmName || '',
+      address: oc.address || '',
+    })));
+
     setCaseManagers(c.caseManagers || []);
     setFilingDate(toDateInput(c.filingDate));
     setDescription(c.description || '');
@@ -294,24 +336,37 @@ export default function CaseEditPage({ params }: CaseEditPageProps) {
     });
   }, [llcId]);
 
-  const selectedTenant = tenants.find((t) => t.id === opposingPartyTenantId);
-
   const getPropertyAddress = (propertyId: string | undefined): string => {
     if (!propertyId) return '';
     const prop = properties.find((p) => p.id === propertyId);
     return prop?.address || prop?.name || '';
   };
 
-  const filteredTenants = tenants.filter((t) => {
-    if (!tenantSearch) return true;
-    const name = getTenantDisplayName(t).toLowerCase();
-    return name.includes(tenantSearch.toLowerCase());
-  });
+  const getFilteredTenants = (search: string) => {
+    return tenants.filter((t) => {
+      if (!search) return true;
+      const name = getTenantDisplayName(t).toLowerCase();
+      return name.includes(search.toLowerCase());
+    });
+  };
 
   const handleCaseManagerToggle = (userId: string) => {
     setCaseManagers((prev) =>
       prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
     );
+  };
+
+  // Array helpers
+  const updateOpposingParty = (index: number, updates: Partial<OpposingPartyEntry>) => {
+    setOpposingParties((prev) => prev.map((p, i) => i === index ? { ...p, ...updates } : p));
+  };
+
+  const updateOpposingCounsel = (index: number, updates: Partial<CounselEntry>) => {
+    setOpposingCounsels((prev) => prev.map((c, i) => i === index ? { ...c, ...updates } : c));
+  };
+
+  const updateOurCounsel = (index: number, updates: Partial<CounselEntry>) => {
+    setOurCounsels((prev) => prev.map((c, i) => i === index ? { ...c, ...updates } : c));
   };
 
   const buildCurrentPlaintiff = (): PlaintiffData | undefined => {
@@ -326,36 +381,52 @@ export default function CaseEditPage({ params }: CaseEditPageProps) {
     return undefined;
   };
 
-  const buildCurrentOpposingParty = (): OpposingPartyData | undefined => {
-    if (opposingPartyType === 'tenant' && opposingPartyTenantId) {
-      const tenant = selectedTenant || tenants.find((t) => t.id === opposingPartyTenantId);
-      if (tenant) {
-        const tenantName = getTenantDisplayName(tenant);
-        const propertyAddress = getPropertyAddress(tenant.propertyId);
-        return {
-          type: 'tenant',
-          tenantId: tenant.id,
-          tenantName,
-          ...(propertyAddress && { propertyAddress }),
-          ...(tenant.email && { email: tenant.email }),
-          ...(tenant.phone && { phone: tenant.phone }),
-        };
+  const buildCurrentOpposingParties = (): OpposingPartyData[] => {
+    const result: OpposingPartyData[] = [];
+    for (const op of opposingParties) {
+      if (op.type === 'tenant' && op.tenantId) {
+        const tenant = tenants.find((t) => t.id === op.tenantId);
+        if (tenant) {
+          const tenantName = getTenantDisplayName(tenant);
+          const propertyAddress = getPropertyAddress(tenant.propertyId);
+          result.push({
+            type: 'tenant',
+            tenantId: tenant.id,
+            tenantName,
+            ...(propertyAddress && { propertyAddress }),
+            ...(tenant.email && { email: tenant.email }),
+            ...(tenant.phone && { phone: tenant.phone }),
+          });
+        }
+      } else if (op.type === 'other' && op.name) {
+        result.push({ type: 'other', name: op.name });
       }
-    } else if (opposingPartyType === 'other' && opposingPartyName) {
-      return { type: 'other', name: opposingPartyName };
     }
-    return undefined;
+    return result;
   };
 
-  const buildCurrentOpposingCounsel = (): OpposingCounselData | undefined => {
-    if (!ocName) return undefined;
-    return {
-      name: ocName,
-      ...(ocEmail && { email: ocEmail }),
-      ...(ocPhone && { phone: ocPhone }),
-      ...(ocFirmName && { firmName: ocFirmName }),
-      ...(ocAddress && { address: ocAddress }),
-    };
+  const buildCurrentOpposingCounsels = (): CounselData[] => {
+    return opposingCounsels
+      .filter((c) => c.name)
+      .map((c) => ({
+        name: c.name,
+        ...(c.email && { email: c.email }),
+        ...(c.phone && { phone: c.phone }),
+        ...(c.firmName && { firmName: c.firmName }),
+        ...(c.address && { address: c.address }),
+      }));
+  };
+
+  const buildCurrentOurCounsels = (): CounselData[] => {
+    return ourCounsels
+      .filter((c) => c.name)
+      .map((c) => ({
+        name: c.name,
+        ...(c.email && { email: c.email }),
+        ...(c.phone && { phone: c.phone }),
+        ...(c.firmName && { firmName: c.firmName }),
+        ...(c.address && { address: c.address }),
+      }));
   };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -374,7 +445,6 @@ export default function CaseEditPage({ params }: CaseEditPageProps) {
       if (caseType !== caseData?.caseType) body.caseType = caseType;
       if (status !== caseData?.status) body.status = status;
       if (visibility !== caseData?.visibility) body.visibility = visibility;
-      if (ourCounsel !== (caseData?.ourCounsel || '')) body.ourCounsel = ourCounsel;
       if (description !== (caseData?.description || '')) body.description = description;
 
       // Date diffs
@@ -408,16 +478,25 @@ export default function CaseEditPage({ params }: CaseEditPageProps) {
         body.plaintiff = currentPlaintiff || null;
       }
 
-      // Opposing Party diff
-      const currentOpposingParty = buildCurrentOpposingParty();
-      if (JSON.stringify(currentOpposingParty) !== JSON.stringify(caseData?.opposingParty)) {
-        body.opposingParty = currentOpposingParty || null;
+      // Opposing Parties diff (always send as array)
+      const currentOpposingParties = buildCurrentOpposingParties();
+      const originalOpposingParties = normalizeOpposingParty(caseData?.opposingParty);
+      if (JSON.stringify(currentOpposingParties) !== JSON.stringify(originalOpposingParties)) {
+        body.opposingParty = currentOpposingParties.length > 0 ? currentOpposingParties : null;
       }
 
-      // Opposing Counsel diff
-      const currentOpposingCounsel = buildCurrentOpposingCounsel();
-      if (JSON.stringify(currentOpposingCounsel) !== JSON.stringify(caseData?.opposingCounsel)) {
-        body.opposingCounsel = currentOpposingCounsel || null;
+      // Opposing Counsel diff (always send as array)
+      const currentOpposingCounsels = buildCurrentOpposingCounsels();
+      const originalOpposingCounsels = normalizeOpposingCounsel(caseData?.opposingCounsel);
+      if (JSON.stringify(currentOpposingCounsels) !== JSON.stringify(originalOpposingCounsels)) {
+        body.opposingCounsel = currentOpposingCounsels.length > 0 ? currentOpposingCounsels : null;
+      }
+
+      // Our Counsel diff (always send as array)
+      const currentOurCounsels = buildCurrentOurCounsels();
+      const originalOurCounsels = normalizeOurCounsel(caseData?.ourCounsel);
+      if (JSON.stringify(currentOurCounsels) !== JSON.stringify(originalOurCounsels)) {
+        body.ourCounsel = currentOurCounsels.length > 0 ? currentOurCounsels : null;
       }
 
       // Case Managers diff
@@ -573,77 +652,101 @@ export default function CaseEditPage({ params }: CaseEditPageProps) {
           )}
         </fieldset>
 
-        {/* Opposing Party */}
+        {/* Opposing Parties */}
         <fieldset className="space-y-4">
           <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-            Opposing Party
+            Opposing Parties
           </legend>
 
-          <div className="flex gap-4 mb-3">
-            <label className="flex items-center gap-2 text-sm">
-              <input type="radio" name="opposingPartyType" value="tenant"
-                checked={opposingPartyType === 'tenant'}
-                onChange={() => setOpposingPartyType('tenant')} />
-              Tenant
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="radio" name="opposingPartyType" value="other"
-                checked={opposingPartyType === 'other'}
-                onChange={() => setOpposingPartyType('other')} />
-              Other
-            </label>
-          </div>
+          {opposingParties.map((op, idx) => {
+            const selectedTenant = tenants.find((t) => t.id === op.tenantId);
+            const filtered = getFilteredTenants(op.tenantSearch);
+            const savedOpData = normalizeOpposingParty(caseData?.opposingParty)[idx];
+            return (
+              <div key={idx} className="p-4 border rounded-md space-y-3 relative">
+                <button type="button"
+                  onClick={() => setOpposingParties((prev) => prev.filter((_, i) => i !== idx))}
+                  className="absolute top-2 right-2 text-xs text-destructive hover:underline">
+                  Remove
+                </button>
 
-          {opposingPartyType === 'tenant' ? (
-            <div className="space-y-3">
-              <div>
-                <label htmlFor="tenantSearch" className="block text-sm font-medium mb-1">Search Tenant</label>
-                <input id="tenantSearch" value={tenantSearch} onChange={(e) => setTenantSearch(e.target.value)}
-                  placeholder="Type to filter tenants..."
-                  className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
-              </div>
-              <div>
-                <select value={opposingPartyTenantId} onChange={(e) => setOpposingPartyTenantId(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md bg-background text-sm">
-                  <option value="">-- Select a tenant --</option>
-                  {filteredTenants.map((t) => (
-                    <option key={t.id} value={t.id}>{getTenantDisplayName(t)}</option>
-                  ))}
-                </select>
-              </div>
-
-              {(selectedTenant || (opposingPartyTenantId && caseData?.opposingParty?.type === 'tenant')) && (
-                <div className="p-3 bg-secondary/50 rounded-md text-sm space-y-1">
-                  {selectedTenant ? (
-                    <>
-                      <p className="font-medium">{getTenantDisplayName(selectedTenant)}</p>
-                      {selectedTenant.propertyId && (
-                        <p className="text-muted-foreground">Property: {getPropertyAddress(selectedTenant.propertyId) || selectedTenant.propertyId}</p>
-                      )}
-                      {selectedTenant.email && <p className="text-muted-foreground">Email: {selectedTenant.email}</p>}
-                      {selectedTenant.phone && <p className="text-muted-foreground">Phone: {selectedTenant.phone}</p>}
-                    </>
-                  ) : (
-                    <>
-                      <p className="font-medium">{caseData?.opposingParty?.tenantName}</p>
-                      {caseData?.opposingParty?.propertyAddress && (
-                        <p className="text-muted-foreground">Property: {caseData.opposingParty.propertyAddress}</p>
-                      )}
-                      {caseData?.opposingParty?.email && <p className="text-muted-foreground">Email: {caseData.opposingParty.email}</p>}
-                      {caseData?.opposingParty?.phone && <p className="text-muted-foreground">Phone: {caseData.opposingParty.phone}</p>}
-                    </>
-                  )}
+                <div className="flex gap-4 mb-3">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="radio" name={`opType-${idx}`} value="tenant"
+                      checked={op.type === 'tenant'}
+                      onChange={() => updateOpposingParty(idx, { type: 'tenant' })} />
+                    Tenant
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="radio" name={`opType-${idx}`} value="other"
+                      checked={op.type === 'other'}
+                      onChange={() => updateOpposingParty(idx, { type: 'other' })} />
+                    Other
+                  </label>
                 </div>
-              )}
-            </div>
-          ) : (
-            <div>
-              <label htmlFor="opposingPartyName" className="block text-sm font-medium mb-1">Name</label>
-              <input id="opposingPartyName" value={opposingPartyName} onChange={(e) => setOpposingPartyName(e.target.value)}
-                placeholder="Opposing party name"
-                className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
-            </div>
-          )}
+
+                {op.type === 'tenant' ? (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Search Tenant</label>
+                      <input value={op.tenantSearch}
+                        onChange={(e) => updateOpposingParty(idx, { tenantSearch: e.target.value })}
+                        placeholder="Type to filter tenants..."
+                        className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
+                    </div>
+                    <div>
+                      <select value={op.tenantId}
+                        onChange={(e) => updateOpposingParty(idx, { tenantId: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-md bg-background text-sm">
+                        <option value="">-- Select a tenant --</option>
+                        {filtered.map((t) => (
+                          <option key={t.id} value={t.id}>{getTenantDisplayName(t)}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {(selectedTenant || (op.tenantId && savedOpData?.type === 'tenant')) && (
+                      <div className="p-3 bg-secondary/50 rounded-md text-sm space-y-1">
+                        {selectedTenant ? (
+                          <>
+                            <p className="font-medium">{getTenantDisplayName(selectedTenant)}</p>
+                            {selectedTenant.propertyId && (
+                              <p className="text-muted-foreground">Property: {getPropertyAddress(selectedTenant.propertyId) || selectedTenant.propertyId}</p>
+                            )}
+                            {selectedTenant.email && <p className="text-muted-foreground">Email: {selectedTenant.email}</p>}
+                            {selectedTenant.phone && <p className="text-muted-foreground">Phone: {selectedTenant.phone}</p>}
+                          </>
+                        ) : (
+                          <>
+                            <p className="font-medium">{savedOpData?.tenantName}</p>
+                            {savedOpData?.propertyAddress && (
+                              <p className="text-muted-foreground">Property: {savedOpData.propertyAddress}</p>
+                            )}
+                            {savedOpData?.email && <p className="text-muted-foreground">Email: {savedOpData.email}</p>}
+                            {savedOpData?.phone && <p className="text-muted-foreground">Phone: {savedOpData.phone}</p>}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Name</label>
+                    <input value={op.name}
+                      onChange={(e) => updateOpposingParty(idx, { name: e.target.value })}
+                      placeholder="Opposing party name"
+                      className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          <button type="button"
+            onClick={() => setOpposingParties((prev) => [...prev, emptyOpposingParty()])}
+            className="text-sm text-primary hover:underline">
+            + Add Opposing Party
+          </button>
         </fieldset>
 
         {/* Opposing Counsel */}
@@ -652,37 +755,56 @@ export default function CaseEditPage({ params }: CaseEditPageProps) {
             Opposing Counsel
           </legend>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="ocName" className="block text-sm font-medium mb-1">Name</label>
-              <input id="ocName" value={ocName} onChange={(e) => setOcName(e.target.value)}
-                className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
-            </div>
-            <div>
-              <label htmlFor="ocEmail" className="block text-sm font-medium mb-1">Email</label>
-              <input id="ocEmail" type="email" value={ocEmail} onChange={(e) => setOcEmail(e.target.value)}
-                className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
-            </div>
-          </div>
+          {opposingCounsels.map((oc, idx) => (
+            <div key={idx} className="p-4 border rounded-md space-y-3 relative">
+              <button type="button"
+                onClick={() => setOpposingCounsels((prev) => prev.filter((_, i) => i !== idx))}
+                className="absolute top-2 right-2 text-xs text-destructive hover:underline">
+                Remove
+              </button>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="ocPhone" className="block text-sm font-medium mb-1">Phone</label>
-              <input id="ocPhone" value={ocPhone} onChange={(e) => setOcPhone(e.target.value)}
-                className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Name</label>
+                  <input value={oc.name}
+                    onChange={(e) => updateOpposingCounsel(idx, { name: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Email</label>
+                  <input type="email" value={oc.email}
+                    onChange={(e) => updateOpposingCounsel(idx, { email: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Phone</label>
+                  <input value={oc.phone}
+                    onChange={(e) => updateOpposingCounsel(idx, { phone: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Firm Name</label>
+                  <input value={oc.firmName}
+                    onChange={(e) => updateOpposingCounsel(idx, { firmName: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Address</label>
+                <input value={oc.address}
+                  onChange={(e) => updateOpposingCounsel(idx, { address: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
+              </div>
             </div>
-            <div>
-              <label htmlFor="ocFirmName" className="block text-sm font-medium mb-1">Firm Name</label>
-              <input id="ocFirmName" value={ocFirmName} onChange={(e) => setOcFirmName(e.target.value)}
-                className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
-            </div>
-          </div>
+          ))}
 
-          <div>
-            <label htmlFor="ocAddress" className="block text-sm font-medium mb-1">Address</label>
-            <input id="ocAddress" value={ocAddress} onChange={(e) => setOcAddress(e.target.value)}
-              className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
-          </div>
+          <button type="button"
+            onClick={() => setOpposingCounsels((prev) => [...prev, emptyCounsel()])}
+            className="text-sm text-primary hover:underline">
+            + Add Opposing Counsel
+          </button>
         </fieldset>
 
         {/* Case Management */}
@@ -691,10 +813,59 @@ export default function CaseEditPage({ params }: CaseEditPageProps) {
             Case Management
           </legend>
 
-          <div>
-            <label htmlFor="ourCounsel" className="block text-sm font-medium mb-1">Our Counsel</label>
-            <input id="ourCounsel" value={ourCounsel} onChange={(e) => setOurCounsel(e.target.value)}
-              className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
+          {/* Our Counsel */}
+          <div className="space-y-3">
+            <label className="block text-sm font-medium">Our Counsel</label>
+            {ourCounsels.map((oc, idx) => (
+              <div key={idx} className="p-4 border rounded-md space-y-3 relative">
+                <button type="button"
+                  onClick={() => setOurCounsels((prev) => prev.filter((_, i) => i !== idx))}
+                  className="absolute top-2 right-2 text-xs text-destructive hover:underline">
+                  Remove
+                </button>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Name</label>
+                    <input value={oc.name}
+                      onChange={(e) => updateOurCounsel(idx, { name: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Email</label>
+                    <input type="email" value={oc.email}
+                      onChange={(e) => updateOurCounsel(idx, { email: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Phone</label>
+                    <input value={oc.phone}
+                      onChange={(e) => updateOurCounsel(idx, { phone: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Firm Name</label>
+                    <input value={oc.firmName}
+                      onChange={(e) => updateOurCounsel(idx, { firmName: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Address</label>
+                  <input value={oc.address}
+                    onChange={(e) => updateOurCounsel(idx, { address: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-md bg-background text-sm" />
+                </div>
+              </div>
+            ))}
+
+            <button type="button"
+              onClick={() => setOurCounsels((prev) => [...prev, emptyCounsel()])}
+              className="text-sm text-primary hover:underline">
+              + Add Our Counsel
+            </button>
           </div>
 
           <div>

@@ -7,6 +7,7 @@ import {
   Plaintiff,
   OpposingParty,
   OpposingCounsel,
+  OurCounsel,
   CaseResolution,
 } from '@shared/types';
 
@@ -21,9 +22,9 @@ export interface CreateCaseInput {
   status?: CaseStatus;
   visibility?: CaseVisibility;
   plaintiff?: Plaintiff;
-  opposingParty?: OpposingParty;
-  opposingCounsel?: OpposingCounsel;
-  ourCounsel?: string;
+  opposingParty?: OpposingParty[];
+  opposingCounsel?: OpposingCounsel[];
+  ourCounsel?: OurCounsel[];
   caseManagers?: string[];
   filingDate?: string;
   nextHearingDate?: string;
@@ -40,9 +41,9 @@ export interface UpdateCaseInput {
   status?: CaseStatus;
   visibility?: CaseVisibility;
   plaintiff?: Plaintiff;
-  opposingParty?: OpposingParty;
-  opposingCounsel?: OpposingCounsel;
-  ourCounsel?: string;
+  opposingParty?: OpposingParty[];
+  opposingCounsel?: OpposingCounsel[];
+  ourCounsel?: OurCounsel[];
   caseManagers?: string[];
   filingDate?: string;
   nextHearingDate?: string;
@@ -64,9 +65,9 @@ export interface CaseRecord {
   status: CaseStatus;
   visibility: CaseVisibility;
   plaintiff?: Plaintiff;
-  opposingParty?: OpposingParty;
-  opposingCounsel?: OpposingCounsel;
-  ourCounsel?: string;
+  opposingParty?: OpposingParty[];
+  opposingCounsel?: OpposingCounsel[];
+  ourCounsel?: OurCounsel[];
   caseManagers: string[];
   filingDate?: string;
   nextHearingDate?: string;

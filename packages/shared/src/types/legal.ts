@@ -49,6 +49,17 @@ export interface OpposingCounsel {
 }
 
 /**
+ * Our counsel contact information
+ */
+export interface OurCounsel {
+  name: string;
+  email?: string;
+  phone?: string;
+  firmName?: string;
+  address?: string;
+}
+
+/**
  * Case resolution - how the case was resolved
  */
 export interface CaseResolution {
@@ -84,9 +95,9 @@ export interface Case {
   status: CaseStatus;
   visibility: CaseVisibility;
   plaintiff?: Plaintiff;
-  opposingParty?: OpposingParty;
-  opposingCounsel?: OpposingCounsel;
-  ourCounsel?: string;
+  opposingParty?: OpposingParty[];
+  opposingCounsel?: OpposingCounsel[];
+  ourCounsel?: OurCounsel[];
   caseManagers: string[]; // user IDs who can edit/archive this case
   filingDate?: string; // ISO date
   nextHearingDate?: string; // ISO date (auto-computed from courtDates)
