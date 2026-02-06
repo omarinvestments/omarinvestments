@@ -206,6 +206,19 @@ function formatDate(iso: string | undefined): string {
   return new Date(year, month - 1, day).toLocaleDateString();
 }
 
+function formatTime(time: string | undefined): string {
+  if (!time) return '';
+  // Handle 24-hour format (HH:MM) from time input
+  const parts = time.split(':');
+  if (parts.length < 2) return time;
+  let hours = parseInt(parts[0] || '0', 10);
+  const minutes = parts[1];
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  if (hours === 0) hours = 12;
+  return `${hours}:${minutes}${ampm}`;
+}
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -1016,7 +1029,7 @@ export default function CaseDetailPage({ params }: CaseDetailPageProps) {
                         </span>
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        {formatDate(cd.date)}{cd.time && ` at ${cd.time} (CDT)`}<br/>
+                        {formatDate(cd.date)}{cd.time && ` at ${formatTime(cd.time)} (CDT)`}<br/>
                         {cd.judge && `Judge ${cd.judge}`}<br/>
                         {cd.courtroom && `Room ${cd.courtroom}`}<br/>
                       </p>
@@ -1069,7 +1082,7 @@ export default function CaseDetailPage({ params }: CaseDetailPageProps) {
                               </span>
                             </div>
                             <p className="text-xs text-muted-foreground">
-                              {formatDate(cd.date)}{cd.time && ` at ${cd.time} (CDT)`}
+                              {formatDate(cd.date)}{cd.time && ` at ${formatTime(cd.time)} (CDT)`}
                             </p>
                             {cd.outcome && (
                               <p className="text-xs mt-1">

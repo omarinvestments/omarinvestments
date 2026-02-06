@@ -101,6 +101,19 @@ function formatDate(iso: string): string {
   });
 }
 
+function formatTime(time: string | undefined): string {
+  if (!time) return '';
+  // Handle 24-hour format (HH:MM) from time input
+  const parts = time.split(':');
+  if (parts.length < 2) return time;
+  let hours = parseInt(parts[0] || '0', 10);
+  const minutes = parts[1];
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  if (hours === 0) hours = 12;
+  return `${hours}:${minutes}${ampm}`;
+}
+
 
 export default function LegalPage({ params }: LegalPageProps) {
   const { llcId } = use(params);
@@ -268,13 +281,18 @@ export default function LegalPage({ params }: LegalPageProps) {
                       <div>
                         <div className="font-medium">
                           {formatDate(c.nextCourtDate.date)}
-                          {c.nextCourtDate.time && (
-                            <span className="text-muted-foreground ml-1">@ {c.nextCourtDate.time}</span>
+                          {c.nextCourtDate.time && ( 
+                            <span className="text-muted-foreground ml-1">
+                              @ {formatTime(c.nextCourtDate.time)}
+                              <span className="ml-1 text-xs align-top text-muted-foreground/70">
+                                (CDT)
+                              </span>
+                            </span>
                           )}
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          {COURT_DATE_TYPE_LABELS[c.nextCourtDate.type] || c.nextCourtDate.type}
-                          {c.nextCourtDate.judge && ` · ${c.nextCourtDate.judge}`}
+                          Hearing Type: {COURT_DATE_TYPE_LABELS[c.nextCourtDate.type] || c.nextCourtDate.type}<br/>
+                          {c.nextCourtDate.judge && `Judge: ${c.nextCourtDate.judge}`}
                         </div>
                       </div>
                     ) : c.nextHearingDate ? (
