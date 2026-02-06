@@ -71,6 +71,7 @@ export default function DashboardSidebar() {
   const pathname = usePathname();
   const { isCollapsed, toggle } = useSidebar();
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   // Check if user is super-admin
   useEffect(() => {
@@ -88,20 +89,55 @@ export default function DashboardSidebar() {
     checkSuperAdmin();
   }, []);
 
+  // Close sidebar when route changes
+  useEffect(() => {
+    setIsMobileOpen(false);
+  }, [pathname]);
+
+  // Close sidebar on escape key
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsMobileOpen(false);
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, []);
+
+  // Prevent body scroll when sidebar is open on mobile
+  useEffect(() => {
+    if (isMobileOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isMobileOpen]);
+
   // Combine nav items, adding super-admin items if applicable
   const navItems = isSuperAdmin ? [...NAV_ITEMS, ...SUPER_ADMIN_NAV_ITEMS] : NAV_ITEMS;
 
-  return (
-    <aside
-      className={`
-        ${isCollapsed ? 'w-16' : 'w-56'}
-        flex flex-col border-r bg-card
-        min-h-[calc(100vh-57px)]
-        transition-all duration-200 ease-in-out
-      `}
-    >
+  const sidebarContent = (isMobile: boolean) => (
+    <>
+      {/* Mobile header with close button */}
+      {isMobile && (
+        <div className="p-4 border-b flex items-center justify-between">
+          <span className="font-semibold text-sm">Menu</span>
+          <button
+            onClick={() => setIsMobileOpen(false)}
+            className="p-1 text-muted-foreground hover:text-foreground"
+            aria-label="Close menu"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       {/* Navigation Items */}
-      <nav className="flex-1 p-2 space-y-1">
+      <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
         {navItems.map((item) => {
           const isActive = pathname === item.href ||
             (item.href !== '/llcs' && pathname.startsWith(item.href));
@@ -110,6 +146,7 @@ export default function DashboardSidebar() {
             <Link
               key={item.href + item.label}
               href={item.href}
+              onClick={() => setIsMobileOpen(false)}
               className={`
                 flex items-center gap-3 px-3 py-2 rounded-md
                 transition-colors duration-150
@@ -117,12 +154,12 @@ export default function DashboardSidebar() {
                   ? 'bg-secondary text-secondary-foreground'
                   : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
                 }
-                ${isCollapsed ? 'justify-center' : ''}
+                ${!isMobile && isCollapsed ? 'justify-center' : ''}
               `}
-              title={isCollapsed ? item.label : undefined}
+              title={!isMobile && isCollapsed ? item.label : undefined}
             >
               {item.icon}
-              {!isCollapsed && (
+              {(isMobile || !isCollapsed) && (
                 <span className="text-sm font-medium">{item.label}</span>
               )}
             </Link>
@@ -130,31 +167,78 @@ export default function DashboardSidebar() {
         })}
       </nav>
 
-      {/* Collapse Toggle */}
-      <div className="p-2 border-t">
-        <button
-          onClick={toggle}
-          className={`
-            flex items-center gap-3 px-3 py-2 rounded-md w-full
-            text-muted-foreground hover:bg-secondary/50 hover:text-foreground
-            transition-colors duration-150
-            ${isCollapsed ? 'justify-center' : ''}
-          `}
-          title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          <svg
-            className={`w-5 h-5 transition-transform duration-200 ${isCollapsed ? 'rotate-180' : ''}`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+      {/* Collapse Toggle - only on desktop */}
+      {!isMobile && (
+        <div className="p-2 border-t">
+          <button
+            onClick={toggle}
+            className={`
+              flex items-center gap-3 px-3 py-2 rounded-md w-full
+              text-muted-foreground hover:bg-secondary/50 hover:text-foreground
+              transition-colors duration-150
+              ${isCollapsed ? 'justify-center' : ''}
+            `}
+            title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-          </svg>
-          {!isCollapsed && (
-            <span className="text-sm font-medium">Collapse</span>
-          )}
-        </button>
-      </div>
-    </aside>
+            <svg
+              className={`w-5 h-5 transition-transform duration-200 ${isCollapsed ? 'rotate-180' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+            </svg>
+            {!isCollapsed && (
+              <span className="text-sm font-medium">Collapse</span>
+            )}
+          </button>
+        </div>
+      )}
+    </>
+  );
+
+  return (
+    <>
+      {/* Mobile menu toggle button - fixed position */}
+      <button
+        onClick={() => setIsMobileOpen(true)}
+        className="lg:hidden fixed bottom-4 left-4 z-40 p-3 bg-primary text-primary-foreground rounded-full shadow-lg hover:opacity-90 transition-opacity"
+        aria-label="Open menu"
+      >
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+      </button>
+
+      {/* Desktop sidebar - always visible */}
+      <aside
+        className={`
+          hidden lg:flex flex-col
+          ${isCollapsed ? 'w-16' : 'w-56'}
+          border-r bg-card
+          min-h-[calc(100vh-57px)]
+          transition-all duration-200 ease-in-out
+          flex-shrink-0
+        `}
+      >
+        {sidebarContent(false)}
+      </aside>
+
+      {/* Mobile sidebar overlay */}
+      {isMobileOpen && (
+        <div
+          className="lg:hidden fixed inset-0 z-50 bg-black/50"
+          onClick={() => setIsMobileOpen(false)}
+        >
+          {/* Sidebar panel */}
+          <aside
+            className="absolute left-0 top-0 h-full w-64 bg-card shadow-xl flex flex-col overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {sidebarContent(true)}
+          </aside>
+        </div>
+      )}
+    </>
   );
 }

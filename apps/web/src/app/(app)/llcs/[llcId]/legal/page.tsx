@@ -14,7 +14,16 @@ import {
 interface OpposingParty {
   type: 'tenant' | 'other';
   tenantId?: string;
+  tenantName?: string;
   name?: string;
+}
+
+interface NextCourtDate {
+  date: string;
+  time?: string;
+  type: string;
+  judge?: string;
+  courtroom?: string;
 }
 
 interface CaseItem {
@@ -24,14 +33,22 @@ interface CaseItem {
   docketNumber?: string;
   caseType: string;
   status: string;
-  opposingParty?: OpposingParty;
+  opposingParty?: OpposingParty | OpposingParty[];
   nextHearingDate?: string;
+  nextCourtDate?: NextCourtDate;
   createdAt: string;
 }
 
-function getOpposingPartyName(party?: OpposingParty): string {
+function getOpposingPartyName(party?: OpposingParty | OpposingParty[]): string {
   if (!party) return '—';
-  return party.name || '—';
+
+  // Handle array - get first party's name
+  const first = Array.isArray(party) ? party[0] : party;
+  if (!first) return '—';
+
+  // For tenant type, use tenantName; for other, use name
+  const name = first.type === 'tenant' ? first.tenantName : first.name;
+  return name || '—';
 }
 
 interface LegalPageProps {
@@ -56,13 +73,34 @@ const CASE_TYPE_LABELS: Record<string, string> = {
   other: 'Other',
 };
 
+const COURT_DATE_TYPE_LABELS: Record<string, string> = {
+  hearing: 'Hearing',
+  trial: 'Trial',
+  motion: 'Motion',
+  status_conference: 'Status Conference',
+  pretrial_conference: 'Pretrial Conference',
+  mediation: 'Mediation',
+  settlement_conference: 'Settlement Conference',
+  arraignment: 'Arraignment',
+  sentencing: 'Sentencing',
+  other: 'Other',
+};
+
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', {
+  // Parse date parts directly to avoid timezone offset issues
+  const [datePart] = iso.split('T');
+  if (!datePart) return '—';
+  const parts = datePart.split('-').map(Number);
+  const [year, month, day] = parts;
+  if (!year || !month || !day) return '—';
+  const date = new Date(year, month - 1, day); // month is 0-indexed
+  return date.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
   });
 }
+
 
 export default function LegalPage({ params }: LegalPageProps) {
   const { llcId } = use(params);
@@ -195,10 +233,10 @@ export default function LegalPage({ params }: LegalPageProps) {
           <table className="w-full text-sm">
             <thead className="bg-secondary">
               <tr>
-                <th className="text-left px-4 py-3 font-medium">Court / Docket</th>
+                <th className="text-left px-4 py-3 font-medium">Opposing Party</th>
+                <th className="text-left px-4 py-3 font-medium">Court</th>
                 <th className="text-left px-4 py-3 font-medium">Type</th>
                 <th className="text-left px-4 py-3 font-medium">Status</th>
-                <th className="text-left px-4 py-3 font-medium">Opposing Party</th>
                 <th className="text-left px-4 py-3 font-medium">Next Hearing</th>
                 <th className="text-right px-4 py-3 font-medium">Actions</th>
               </tr>
@@ -208,11 +246,14 @@ export default function LegalPage({ params }: LegalPageProps) {
                 <tr key={c.id} className="hover:bg-secondary/30 transition-colors">
                   <td className="px-4 py-3">
                     <Link href={`/llcs/${llcId}/legal/${c.id}`} className="hover:underline">
-                      <div className="font-medium">{c.court}</div>
+                      <div className="font-medium">v. {getOpposingPartyName(c.opposingParty)}</div>
                       {c.docketNumber && (
                         <div className="text-muted-foreground text-xs">#{c.docketNumber}</div>
                       )}
                     </Link>
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {c.court}
                   </td>
                   <td className="px-4 py-3">
                     {CASE_TYPE_LABELS[c.caseType] || c.caseType}
@@ -222,24 +263,49 @@ export default function LegalPage({ params }: LegalPageProps) {
                       {c.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {getOpposingPartyName(c.opposingParty)}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {c.nextHearingDate ? formatDate(c.nextHearingDate) : '—'}
+                  <td className="px-4 py-3">
+                    {c.nextCourtDate ? (
+                      <div>
+                        <div className="font-medium">
+                          {formatDate(c.nextCourtDate.date)}
+                          {c.nextCourtDate.time && (
+                            <span className="text-muted-foreground ml-1">@ {c.nextCourtDate.time}</span>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {COURT_DATE_TYPE_LABELS[c.nextCourtDate.type] || c.nextCourtDate.type}
+                          {c.nextCourtDate.judge && ` · ${c.nextCourtDate.judge}`}
+                        </div>
+                      </div>
+                    ) : c.nextHearingDate ? (
+                      <div className="text-muted-foreground">{formatDate(c.nextHearingDate)}</div>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <Link
                       href={`/llcs/${llcId}/legal/${c.id}`}
-                      className="text-xs text-muted-foreground hover:text-foreground mr-3"
+                      className="inline-flex p-1.5 text-muted-foreground hover:text-foreground transition-colors"
+                      title="Edit"
                     >
-                      Edit
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+                        <path d="m15 5 4 4"/>
+                      </svg>
                     </Link>
                     <button
                       onClick={() => handleDelete(c.id, c.court)}
-                      className="text-xs text-muted-foreground hover:text-destructive"
+                      className="inline-flex p-1.5 text-muted-foreground hover:text-red-600 transition-colors"
+                      title="Delete"
                     >
-                      Delete
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 6h18"/>
+                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+                        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                        <line x1="10" x2="10" y1="11" y2="17"/>
+                        <line x1="14" x2="14" y1="11" y2="17"/>
+                      </svg>
                     </button>
                   </td>
                 </tr>

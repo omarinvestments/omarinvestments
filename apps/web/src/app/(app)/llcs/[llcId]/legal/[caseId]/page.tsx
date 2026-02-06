@@ -607,22 +607,30 @@ export default function CaseDetailPage({ params }: CaseDetailPageProps) {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between">
+      {/* Header - Mobile responsive */}
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
-          <div className="flex items-center gap-3 mb-2">
-            <h1 className="text-2xl font-bold">
-              {caseData.docketNumber || `${CASE_TYPE_LABELS[caseData.caseType] || caseData.caseType} Case`}
-            </h1>
+          {/* Docket number on its own row */}
+          <p className="font-bold">
+            {caseData.plaintiff?.type === 'llc' ? caseData.plaintiff.llcName : caseData.plaintiff?.name} <br/>v. {Array.isArray(caseData.opposingParty) ? caseData.opposingParty.map(op => op.name || op.email).join(', ') : caseData.opposingParty?.name || caseData.opposingParty?.email || 'Unknown Opposing Party'}
+          </p>
+          {/* Docket number on its own row */}
+          <h3 className="text-2xl font-bold">
+            {caseData.docketNumber || `${CASE_TYPE_LABELS[caseData.caseType] || caseData.caseType} Case`}
+          </h3>
+          {/* Status below docket, left-aligned */}
+          <div className="mt-1 mb-2">
             <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${STATUS_COLORS[caseData.status] || 'bg-gray-100'}`}>
               {caseData.status}
             </span>
           </div>
+          {/* Court and jurisdiction on its own row */}
           <p className="text-muted-foreground">
             {caseData.court} &bull; {caseData.jurisdiction}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        {/* Edit and Delete - right aligned, own row on mobile */}
+        <div className="flex items-center gap-2 justify-end">
           <Link
             href={`/llcs/${llcId}/legal/${caseId}/edit`}
             className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity text-sm"

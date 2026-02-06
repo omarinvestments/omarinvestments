@@ -52,6 +52,14 @@ export interface UpdateCaseInput {
   tags?: string[];
 }
 
+export interface NextCourtDate {
+  date: string;
+  time?: string;
+  type: string;
+  judge?: string;
+  courtroom?: string;
+}
+
 export interface CaseRecord {
   id: string;
   llcId: string;
@@ -71,6 +79,7 @@ export interface CaseRecord {
   caseManagers: string[];
   filingDate?: string;
   nextHearingDate?: string;
+  nextCourtDate?: NextCourtDate;
   resolution?: CaseResolution;
   description?: string;
   tags: string[];
@@ -164,34 +173,71 @@ export async function listCases(llcId: string): Promise<CaseRecord[]> {
     .orderBy('createdAt', 'desc')
     .get();
 
-  return snap.docs.map((doc) => {
-    const d = doc.data();
-    return {
-      id: doc.id,
-      llcId,
-      propertyId: d.propertyId || undefined,
-      unitId: d.unitId || undefined,
-      tenantId: d.tenantId || undefined,
-      court: d.court,
-      jurisdiction: d.jurisdiction,
-      docketNumber: d.docketNumber || undefined,
-      caseType: d.caseType as CaseType,
-      status: d.status as CaseStatus,
-      visibility: d.visibility as CaseVisibility,
-      plaintiff: d.plaintiff || undefined,
-      opposingParty: d.opposingParty || undefined,
-      opposingCounsel: d.opposingCounsel || undefined,
-      ourCounsel: d.ourCounsel || undefined,
-      caseManagers: d.caseManagers || [],
-      filingDate: d.filingDate || undefined,
-      nextHearingDate: d.nextHearingDate || undefined,
-      resolution: d.resolution || undefined,
-      description: d.description || undefined,
-      tags: d.tags || [],
-      createdAt: d.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-      updatedAt: d.updatedAt?.toDate?.()?.toISOString() || undefined,
-    };
-  });
+  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+
+  // Fetch next court date for each case in parallel
+  const casesWithCourtDates = await Promise.all(
+    snap.docs.map(async (doc) => {
+      const d = doc.data();
+
+      // Get the next scheduled court date for this case
+      let nextCourtDate: NextCourtDate | undefined;
+      if (d.nextHearingDate) {
+        const courtDateSnap = await adminDb
+          .collection('llcs')
+          .doc(llcId)
+          .collection('cases')
+          .doc(doc.id)
+          .collection('courtDates')
+          .where('status', '==', 'scheduled')
+          .where('date', '>=', today)
+          .orderBy('date', 'asc')
+          .limit(1)
+          .get();
+
+        const courtDateDoc = courtDateSnap.docs[0];
+        if (courtDateDoc) {
+          const cd = courtDateDoc.data();
+          nextCourtDate = {
+            date: cd.date,
+            time: cd.time || undefined,
+            type: cd.type,
+            judge: cd.judge || undefined,
+            courtroom: cd.courtroom || undefined,
+          };
+        }
+      }
+
+      return {
+        id: doc.id,
+        llcId,
+        propertyId: d.propertyId || undefined,
+        unitId: d.unitId || undefined,
+        tenantId: d.tenantId || undefined,
+        court: d.court,
+        jurisdiction: d.jurisdiction,
+        docketNumber: d.docketNumber || undefined,
+        caseType: d.caseType as CaseType,
+        status: d.status as CaseStatus,
+        visibility: d.visibility as CaseVisibility,
+        plaintiff: d.plaintiff || undefined,
+        opposingParty: d.opposingParty || undefined,
+        opposingCounsel: d.opposingCounsel || undefined,
+        ourCounsel: d.ourCounsel || undefined,
+        caseManagers: d.caseManagers || [],
+        filingDate: d.filingDate || undefined,
+        nextHearingDate: d.nextHearingDate || undefined,
+        nextCourtDate,
+        resolution: d.resolution || undefined,
+        description: d.description || undefined,
+        tags: d.tags || [],
+        createdAt: d.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+        updatedAt: d.updatedAt?.toDate?.()?.toISOString() || undefined,
+      };
+    })
+  );
+
+  return casesWithCourtDates;
 }
 
 /**
