@@ -10,7 +10,7 @@ interface NewCasePageProps {
 
 interface LlcOption {
   id: string;
-  name: string;
+  legalName: string;
 }
 
 interface TenantOption {
@@ -190,7 +190,7 @@ export default function NewCasePage({ params }: NewCasePageProps) {
       } else if (plaintiffType === 'llc' && plaintiffLlcId) {
         const selectedLlc = llcs.find((l) => l.id === plaintiffLlcId);
         if (selectedLlc) {
-          body.plaintiff = { type: 'llc', llcId: selectedLlc.id, llcName: selectedLlc.name };
+          body.plaintiff = { type: 'llc', llcId: selectedLlc.id, llcName: selectedLlc.legalName };
         }
       }
 
@@ -355,7 +355,7 @@ export default function NewCasePage({ params }: NewCasePageProps) {
                 className="w-full px-3 py-2 border rounded-md bg-background text-sm">
                 <option value="">-- Select an LLC --</option>
                 {llcs.map((l) => (
-                  <option key={l.id} value={l.id}>{l.name}</option>
+                  <option key={l.id} value={l.id}>{l.legalName}</option>
                 ))}
               </select>
             </div>

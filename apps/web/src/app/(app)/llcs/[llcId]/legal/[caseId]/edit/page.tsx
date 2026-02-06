@@ -62,7 +62,7 @@ interface CaseDetail {
 
 interface LlcOption {
   id: string;
-  name: string;
+  legalName: string;
 }
 
 interface TenantOption {
@@ -375,7 +375,7 @@ export default function CaseEditPage({ params }: CaseEditPageProps) {
     } else if (plaintiffType === 'llc' && plaintiffLlcId) {
       const selectedLlc = llcs.find((l) => l.id === plaintiffLlcId);
       if (selectedLlc) {
-        return { type: 'llc', llcId: selectedLlc.id, llcName: selectedLlc.name };
+        return { type: 'llc', llcId: selectedLlc.id, llcName: selectedLlc.legalName };
       }
     }
     return undefined;
@@ -645,7 +645,7 @@ export default function CaseEditPage({ params }: CaseEditPageProps) {
                 className="w-full px-3 py-2 border rounded-md bg-background text-sm">
                 <option value="">-- Select an LLC --</option>
                 {llcs.map((l) => (
-                  <option key={l.id} value={l.id}>{l.name}</option>
+                  <option key={l.id} value={l.id}>{l.legalName}</option>
                 ))}
               </select>
             </div>
